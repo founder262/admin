@@ -111,8 +111,8 @@ Deno.serve(async (req: Request) => {
       const lastWeekStr = lastWeek.toISOString().split('T')[0]
 
       const supabaseAdmin2 = createClient(
-        Deno.env.get('SUPABASE_URL') ?? 'https://lidptdtnsvulvjdwkwvz.supabase.co',
-        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxpZHB0ZHRuc3Z1bHZqZHdrd3Z6Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NjYxNjExNCwiZXhwIjoyMDkyMTkyMTE0fQ.tcAuMyJZvBUfuNo1SCxVCr-WkSdmWjYFV9NTKjMdSVo'
+        Deno.env.get('SUPABASE_URL'),
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
       )
 
       const [bookingsRes, salonsRes, requestsRes, completedRes] = await Promise.all([
@@ -138,8 +138,8 @@ Deno.serve(async (req: Request) => {
 
     // Initialize Supabase Admin client
     const supabaseAdmin = createClient(
-      Deno.env.get('SUPABASE_URL') ?? 'https://lidptdtnsvulvjdwkwvz.supabase.co',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxpZHB0ZHRuc3Z1bHZqZHdrd3Z6Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NjYxNjExNCwiZXhwIjoyMDkyMTkyMTE0fQ.tcAuMyJZvBUfuNo1SCxVCr-WkSdmWjYFV9NTKjMdSVo'
+      Deno.env.get('SUPABASE_URL'),
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
     )
 
     let result: any = { data: null, error: null }
@@ -272,3 +272,4 @@ Deno.serve(async (req: Request) => {
     )
   }
 })
+

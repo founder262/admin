@@ -22,8 +22,8 @@ Deno.serve(async (req: Request) => {
     }
 
     const supabaseAdmin = createClient(
-      Deno.env.get('SUPABASE_URL') ?? 'https://lidptdtnsvulvjdwkwvz.supabase.co',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxpZHB0ZHRuc3Z1bHZqZHdrd3Z6Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NjYxNjExNCwiZXhwIjoyMDkyMTkyMTE0fQ.tcAuMyJZvBUfuNo1SCxVCr-WkSdmWjYFV9NTKjMdSVo'
+      Deno.env.get('SUPABASE_URL'),
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
     )
 
     const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
@@ -45,3 +45,4 @@ Deno.serve(async (req: Request) => {
     return new Response(JSON.stringify({ error: error.message || String(error) }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
   }
 })
+

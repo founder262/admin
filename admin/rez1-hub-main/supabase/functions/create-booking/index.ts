@@ -43,8 +43,8 @@ Deno.serve(async (req) => {
 
     // Use service role to bypass RLS
     const supabaseAdmin = createClient(
-      Deno.env.get('SUPABASE_URL') ?? 'https://lidptdtnsvulvjdwkwvz.supabase.co',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxpZHB0ZHRuc3Z1bHZqZHdrd3Z6Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NjYxNjExNCwiZXhwIjoyMDkyMTkyMTE0fQ.tcAuMyJZvBUfuNo1SCxVCr-WkSdmWjYFV9NTKjMdSVo'
+      Deno.env.get('SUPABASE_URL'),
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
     )
 
     // 1. Ensure customer record exists (upsert so it's idempotent)
@@ -174,3 +174,4 @@ Deno.serve(async (req) => {
     )
   }
 })
+
