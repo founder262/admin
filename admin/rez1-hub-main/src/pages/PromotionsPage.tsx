@@ -257,7 +257,16 @@ const PromotionsPage = () => {
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-medium text-card-foreground text-sm truncate">{slide.title}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="font-medium text-card-foreground text-sm truncate">{slide.title}</p>
+                    {(() => {
+                      const today = new Date().toISOString().split('T')[0];
+                      const isExpired = slide.end_date && slide.end_date < today;
+                      return isExpired ? (
+                        <span className="bg-destructive/10 text-destructive border border-destructive/20 text-[10px] px-1.5 py-0.5 rounded-full font-semibold">Expired</span>
+                      ) : null;
+                    })()}
+                  </div>
                   <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
                     <span className="capitalize border px-1.5 rounded">{slide.media_type}</span>
                     <span>Redirect: <span className="capitalize">{slide.redirect_type}</span> → {slide.redirect_value}</span>

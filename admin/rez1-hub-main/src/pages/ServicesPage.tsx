@@ -95,12 +95,25 @@ const ServicesPage = () => {
     }
     
     if (editingService) {
-      const { error } = await supabase.from("services").update(form).eq("id", editingService.id);
-      if (error) toast.error("Failed to update service");
+      const { data, error } = await supabase.functions.invoke("admin-api", {
+        body: {
+          action: "UPDATE",
+          table: "services",
+          id: editingService.id,
+          data: form
+        }
+      });
+      if (error || !data?.success) toast.error("Failed to update service");
       else toast.success("Service updated");
     } else {
-      const { error } = await supabase.from("services").insert(form);
-      if (error) toast.error("Failed to create service");
+      const { data, error } = await supabase.functions.invoke("admin-api", {
+        body: {
+          action: "INSERT",
+          table: "services",
+          data: form
+        }
+      });
+      if (error || !data?.success) toast.error("Failed to create service");
       else toast.success("Service added");
     }
     
@@ -110,9 +123,19 @@ const ServicesPage = () => {
 
   const handleDelete = async (id: string) => {
     if (confirm("Delete this service?")) {
-      await supabase.from("services").delete().eq("id", id);
-      toast.success("Service deleted");
-      fetchServices(selectedSalonId);
+      const { data, error } = await supabase.functions.invoke("admin-api", {
+        body: {
+          action: "DELETE",
+          table: "services",
+          id: id
+        }
+      });
+      if (error || !data?.success) {
+        toast.error("Failed to delete service");
+      } else {
+        toast.success("Service deleted");
+        fetchServices(selectedSalonId);
+      }
     }
   };
 

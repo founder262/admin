@@ -114,7 +114,22 @@ const BookingsPage = () => {
   });
 
   const handleCancel = async (id: string) => {
-    await supabase.functions.invoke('admin-api', { body: { action: 'UPDATE', table: 'bookings', id, data: { status: 'cancelled' } } });
+    const reason = window.prompt("Please provide a reason for cancellation:");
+    if (!reason || reason.trim() === "") {
+      toast.error("Cancellation reason is required");
+      return;
+    }
+    const { error } = await supabase.functions.invoke('cancel-booking', { 
+      body: { 
+        booking_id: id, 
+        cancel_reason: reason.trim(),
+        cancelled_by: 'admin'
+      } 
+    });
+    if (error) {
+      toast.error("Failed to cancel booking");
+      return;
+    }
     toast.success("Booking cancelled by admin");
     fetchBookings();
   };

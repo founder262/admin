@@ -183,9 +183,9 @@ Deno.serve(async (req) => {
     }
 
     // Determine who cancelled
-    // cancelled_by: 'owner' | 'emergency' | 'customer' | null (defaults to customer)
+    // cancelled_by: 'owner' | 'emergency' | 'customer' | 'admin' | null (defaults to customer)
     const cancelledBy = cancelled_by || 'customer'
-    const isSalonCancellation = cancelledBy === 'owner' || cancelledBy === 'emergency'
+    const isSalonCancellation = cancelledBy === 'owner' || cancelledBy === 'emergency' || cancelledBy === 'admin'
 
     // ─── SALON/EMERGENCY CANCELLATION ───────────────────────────────────────
     // When the salon (owner or emergency) cancels, we do NOT process a refund yet.
@@ -198,7 +198,7 @@ Deno.serve(async (req) => {
           status: 'cancelled',
           cancelled_by: cancelledBy,
           cancel_reason: cancel_reason || (cancelledBy === 'emergency' ? 'Emergency closure by salon' : 'Cancelled by salon owner'),
-          refund_status: booking.payment_status === 'paid' ? 'pending_choice' : null,
+          refund_status: 'pending_choice',
           updated_at: new Date().toISOString()
         })
         .eq('id', booking_id)

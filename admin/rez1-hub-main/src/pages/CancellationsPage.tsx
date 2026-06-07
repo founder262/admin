@@ -248,6 +248,8 @@ const CancellationsPage = () => {
                             className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-bold ${
                               b.cancelled_by === "emergency"
                                 ? "bg-red-700/15 text-red-400 border border-red-600/25"
+                                : b.cancelled_by === "admin"
+                                ? "bg-purple-500/10 text-purple-400 border border-purple-500/20"
                                 : isOwnerCancelled
                                 ? "bg-orange-500/10 text-orange-400 border border-orange-500/20"
                                 : "bg-blue-500/10 text-blue-400 border border-blue-500/20"
@@ -255,6 +257,8 @@ const CancellationsPage = () => {
                           >
                             {b.cancelled_by === "emergency"
                               ? "🚨 Emergency Closure"
+                              : b.cancelled_by === "admin"
+                              ? "Admin Cancelled"
                               : isOwnerCancelled
                               ? "Salon Cancelled"
                               : "Customer Cancelled"}
