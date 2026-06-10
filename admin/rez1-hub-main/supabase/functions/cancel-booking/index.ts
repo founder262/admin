@@ -123,57 +123,89 @@ Deno.serve(async (req) => {
       )
     }
 
+    // Action: customer_choose_reschedule
+    // Customer had a pending_choice booking (owner/emergency cancelled) and chose to reschedule.
+    // Mark the original booking's refund_status as 'rescheduled' — no money is refunded.
+    if (action === 'customer_choose_reschedule') {
+      await supabaseAdmin.from('bookings').update({
+        refund_status: 'rescheduled',
+        updated_at: new Date().toISOString()
+      }).eq('id', booking_id)
+
+      return new Response(
+        JSON.stringify({ success: true, refund_status: 'rescheduled' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+      )
+    }
+
     // Action: admin_manual_refund
     // Admin manually triggers/retries a refund for a cancelled booking.
     if (action === 'admin_manual_refund') {
-      if (booking.payment_method === 'razorpay' && booking.razorpay_payment_id && booking.payment_status === 'paid') {
-        if (RAZORPAY_KEY_ID && RAZORPAY_KEY_SECRET) {
-          const rzpAuth = btoa(`${RAZORPAY_KEY_ID}:${RAZORPAY_KEY_SECRET}`)
-          // For owner-cancelled, full refund; for customer-cancelled, refund minus platform fee
-          const isOwnerCancelled = booking.cancelled_by === 'owner' || booking.cancelled_by === 'emergency'
-          const subtotal = Number(booking.subtotal ?? 0)
-          const offerDiscount = Number(booking.offer_discount ?? 0)
-          const platformFee = Number(booking.platform_fee ?? 25)
-          const serviceAmount = subtotal - offerDiscount
-          const refundAmount = isOwnerCancelled
-            ? booking.total_amount
-            : Math.max(0, Math.min(serviceAmount, booking.total_amount - platformFee))
+      // Only attempt Razorpay refund if this booking was paid via Razorpay and has a payment ID
+      if (booking.razorpay_payment_id && RAZORPAY_KEY_ID && RAZORPAY_KEY_SECRET) {
+        const rzpAuth = btoa(`${RAZORPAY_KEY_ID}:${RAZORPAY_KEY_SECRET}`)
 
-          const refundRes = await fetch(`https://api.razorpay.com/v1/payments/${booking.razorpay_payment_id}/refund`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "Authorization": `Basic ${rzpAuth}`
-            },
-            body: JSON.stringify({
-              amount: refundAmount * 100,
-              notes: { reason: 'Admin manual refund' }
-            })
+        // Refund rules:
+        // - Owner cancelled (owner/emergency) → full refund (no platform fee)
+        // - Admin cancelled                   → full refund (no platform fee)
+        // - Customer cancelled                → refund minus platform fee
+        const isOwnerOrAdminCancelled =
+          booking.cancelled_by === 'owner' ||
+          booking.cancelled_by === 'emergency' ||
+          booking.cancelled_by === 'admin'
+
+        const subtotal = Number(booking.subtotal ?? 0)
+        const offerDiscount = Number(booking.offer_discount ?? 0)
+        const platformFee = Number(booking.platform_fee ?? 25)
+        const serviceAmount = subtotal - offerDiscount
+        const refundAmount = isOwnerOrAdminCancelled
+          ? booking.total_amount  // full refund
+          : Math.max(0, Math.min(serviceAmount, booking.total_amount - platformFee))  // minus platform fee
+
+        const refundRes = await fetch(`https://api.razorpay.com/v1/payments/${booking.razorpay_payment_id}/refund`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Basic ${rzpAuth}`
+          },
+          body: JSON.stringify({
+            amount: refundAmount * 100,
+            notes: { reason: 'Admin manual refund - ' + (booking.cancelled_by || 'unknown') }
           })
+        })
 
-          const refundData = await refundRes.json()
-          const newRefundStatus = refundRes.ok ? 'refunded' : 'failed'
-          const newPaymentStatus = refundRes.ok ? 'refunded' : booking.payment_status
+        const refundData = await refundRes.json()
+        const newRefundStatus = refundRes.ok ? 'refunded' : 'failed'
+        const newPaymentStatus = refundRes.ok ? 'refunded' : booking.payment_status
 
-          await supabaseAdmin.from('bookings').update({
-            refund_status: newRefundStatus,
-            refund_amount: refundRes.ok ? refundAmount : (booking.refund_amount || 0),
-            payment_status: newPaymentStatus,
-            updated_at: new Date().toISOString()
-          }).eq('id', booking_id)
+        await supabaseAdmin.from('bookings').update({
+          refund_status: newRefundStatus,
+          refund_amount: refundRes.ok ? refundAmount : (booking.refund_amount || 0),
+          payment_status: newPaymentStatus,
+          updated_at: new Date().toISOString()
+        }).eq('id', booking_id)
 
-          if (!refundRes.ok) {
-            console.error("Razorpay refund failed:", refundData)
-            throw new Error('Razorpay refund failed: ' + (refundData?.error?.description || 'Unknown'))
-          }
-
-          return new Response(
-            JSON.stringify({ success: true, refund_amount: refundAmount, refund_status: 'refunded' }),
-            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
-          )
+        if (!refundRes.ok) {
+          console.error("Razorpay refund failed:", refundData)
+          throw new Error('Razorpay refund failed: ' + (refundData?.error?.description || 'Unknown'))
         }
+
+        return new Response(
+          JSON.stringify({ success: true, refund_amount: refundAmount, refund_status: 'refunded' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+        )
       }
-      throw new Error('Cannot process refund: Not a Razorpay paid booking or credentials missing')
+
+      // Non-Razorpay booking or no payment ID — mark as no refund applicable
+      await supabaseAdmin.from('bookings').update({
+        refund_status: 'failed',
+        updated_at: new Date().toISOString()
+      }).eq('id', booking_id)
+
+      return new Response(
+        JSON.stringify({ success: true, refund_amount: 0, refund_status: 'failed', message: 'No Razorpay payment found — manual refund not applicable' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+      )
     }
 
     // ─── STANDARD CANCELLATION ──────────────────────────────────────────────

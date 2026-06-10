@@ -5,8 +5,21 @@ const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 async function check() {
-  const { data, error } = await supabase.from('salon_requests').select('*').order('created_at', { ascending: false }).limit(1);
-  console.log("latest request", data, error);
+  const { data, error } = await supabase
+    .from('bookings')
+    .select('id, booking_ref, status, cancelled_by, created_at, updated_at')
+    .eq('status', 'cancelled')
+    .order('created_at', { ascending: false });
+  
+  if (error) {
+    console.error("Error:", error);
+    return;
+  }
+
+  console.log("All Cancelled Bookings sorted by created_at desc:");
+  data.forEach((b, idx) => {
+    console.log(`${idx + 1}. Ref: ${b.booking_ref} | By: ${b.cancelled_by} | Created: ${b.created_at} | Updated: ${b.updated_at}`);
+  });
 }
 
 check();

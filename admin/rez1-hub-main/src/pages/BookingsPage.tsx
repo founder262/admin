@@ -29,24 +29,38 @@ const WorkflowConfig = () => {
     maxBookingWindowDays: 7,
     maxPersonsPerBooking: 10,
   });
+  const [configId, setConfigId] = useState<string | null>(null);
 
   useEffect(() => {
-    supabase.from("platform_config").select("value").eq("key", "global_config").single().then(({ data }) => {
-      if (data?.value) {
-        setConfig(prev => ({ ...prev, ...data.value }));
-      }
-    });
+    // platform_config uses flat columns, NOT key/value columns
+    supabase
+      .from("platform_config")
+      .select("id, default_buffer_minutes, max_booking_window_days, max_persons_per_booking")
+      .maybeSingle()
+      .then(({ data }) => {
+        const cfg = data as any;
+        if (cfg) {
+          setConfigId(cfg.id);
+          setConfig({
+            defaultBufferMinutes: cfg.default_buffer_minutes ?? 10,
+            maxBookingWindowDays: cfg.max_booking_window_days ?? 7,
+            maxPersonsPerBooking: cfg.max_persons_per_booking ?? 10,
+          });
+        }
+      });
   }, []);
 
   const handleSave = async () => {
-    // Need to merge with existing
-    const { data } = await supabase.from("platform_config").select("value").eq("key", "global_config").single();
-    const existing = data?.value || {};
-    
-    await supabase.from("platform_config").update({
-      value: { ...existing, ...config }
-    }).eq("key", "global_config");
-    
+    const payload = {
+      default_buffer_minutes: config.defaultBufferMinutes,
+      max_booking_window_days: config.maxBookingWindowDays,
+      max_persons_per_booking: config.maxPersonsPerBooking,
+    };
+    if (configId) {
+      await supabase.from("platform_config").update(payload).eq("id", configId);
+    } else {
+      await supabase.from("platform_config").insert(payload);
+    }
     toast.success("Booking workflow config saved");
   };
 

@@ -22,7 +22,9 @@ const Dashboard = () => {
           adminApi.fetch("bookings", "*", undefined) // Get all bookings for filtering locally if needed, or update proxy to handle queries
         ]);
 
-        const todayBookings = (bookings || []).filter((b: any) => b.booking_date === today);
+        const todayBookings = (bookings || []).filter(
+          (b: any) => b.booking_date === today && b.status !== "cancelled" && b.status !== "rescheduled"
+        );
 
         setStats({
           totalUsers: (users || []).length,

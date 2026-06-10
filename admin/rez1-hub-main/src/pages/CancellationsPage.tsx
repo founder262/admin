@@ -5,10 +5,9 @@ import { Card } from "@/components/ui/card";
 import { AlertCircle, ArrowLeftRight, CheckCircle2, CircleDollarSign, Clock, HelpCircle, Scissors, Trash2, XCircle } from "lucide-react";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
-import { adminApi } from "@/utils/adminApi";
 import { supabase } from "@/lib/supabase";
 
-type FilterType = "all" | "customer" | "owner" | "refunded" | "pending_refund" | "rescheduled";
+type FilterType = "all" | "customer" | "owner" | "admin" | "refunded" | "pending_refund" | "rescheduled";
 
 const CancellationsPage = () => {
   const [bookings, setBookings] = useState<any[]>([]);
@@ -20,14 +19,26 @@ const CancellationsPage = () => {
   const fetchCancellations = async () => {
     setLoading(true);
     try {
-      // Query all cancelled bookings
-      const data = await adminApi.fetch(
-        "bookings",
-        "*, salons(name), customers(full_name)",
-        undefined,
-        [{ column: "status", value: "cancelled" }]
+      // Use admin-api (service role key) to bypass RLS — same pattern as BookingsPage
+      // admin-api does not support OR filters, so we fetch all bookings and filter client-side
+      const { data: res, error } = await supabase.functions.invoke("admin-api", {
+        body: {
+          action: "SELECT",
+          table: "bookings",
+          query: "*, salons(name), customers(full_name)",
+        },
+      });
+
+      if (error) throw error;
+      // admin-api returns { data: [...] }
+      const allRows: any[] = res?.data || [];
+      // Filter to only cancelled + rescheduled
+      const rows = allRows.filter(
+        (b: any) => b.status === "cancelled" || b.status === "rescheduled"
       );
-      setBookings(data || []);
+      // Sort by updated_at descending (most recent first)
+      rows.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
+      setBookings(rows);
     } catch (error: any) {
       console.error("Error fetching cancellations:", error);
       toast.error("Failed to load cancelled bookings");
@@ -104,10 +115,32 @@ const CancellationsPage = () => {
 
     if (filter === "all") return true;
     if (filter === "customer") return b.cancelled_by === "customer" || (!b.cancelled_by);
-    if (filter === "owner") return b.cancelled_by === "owner" || b.cancelled_by === "emergency";
+    // Owner filter: catch owner, emergency, salon, or any other non-customer/non-admin initiated cancellation
+    if (filter === "owner") return (
+      b.cancelled_by === "owner" ||
+      b.cancelled_by === "emergency" ||
+      b.cancelled_by === "salon" ||
+      (b.cancelled_by && b.cancelled_by !== "customer" && b.cancelled_by !== "admin")
+    );
+    if (filter === "admin") return b.cancelled_by === "admin";
     if (filter === "refunded") return b.refund_status === "refunded" || b.payment_status === "refunded";
-    if (filter === "pending_refund") return b.refund_status === "processing" || b.refund_status === "pending_choice";
-    if (filter === "rescheduled") return b.refund_status === "rescheduled";
+    // Pending Refund: has a real payment, refund not yet completed or failed — exclude already refunded/rescheduled
+    if (filter === "pending_refund") {
+      const alreadyDone =
+        b.refund_status === "refunded" ||
+        b.refund_status === "rescheduled" ||
+        b.payment_status === "refunded";
+      if (alreadyDone) return false;
+      return (
+        b.refund_status === "processing" ||
+        b.refund_status === "pending_choice" ||
+        b.refund_status === "failed" ||
+        // null refund_status but has a paid Razorpay payment = needs action
+        (!b.refund_status && b.razorpay_payment_id && (b.total_amount ?? 0) > 0)
+      );
+    }
+    // Rescheduled: either the refund_status is rescheduled, or the booking status itself is rescheduled
+    if (filter === "rescheduled") return b.refund_status === "rescheduled" || b.status === "rescheduled";
 
     return true;
   });
@@ -128,15 +161,22 @@ const CancellationsPage = () => {
         {/* Filters and Search */}
         <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-card p-4 rounded-xl border border-border">
           <div className="flex flex-wrap gap-2 w-full md:w-auto">
-            {(["all", "customer", "owner", "refunded", "pending_refund", "rescheduled"] as FilterType[]).map((f) => (
+            {([
+              { key: "all", label: "All" },
+              { key: "customer", label: "Customer" },
+              { key: "owner", label: "Owner" },
+              { key: "admin", label: "Admin" },
+              { key: "refunded", label: "Refunded" },
+              { key: "pending_refund", label: "Pending Refund" },
+              { key: "rescheduled", label: "Rescheduled" },
+            ] as { key: FilterType; label: string }[]).map(({ key, label }) => (
               <Button
-                key={f}
-                variant={filter === f ? "default" : "outline"}
+                key={key}
+                variant={filter === key ? "default" : "outline"}
                 size="sm"
-                onClick={() => setFilter(f)}
-                className="capitalize"
+                onClick={() => setFilter(key)}
               >
-                {f.replace("_", " ")}
+                {label}
               </Button>
             ))}
           </div>
@@ -164,7 +204,12 @@ const CancellationsPage = () => {
             <div>
               <p className="text-xs font-semibold text-muted-foreground uppercase">Owner Cancelled</p>
               <h3 className="text-2xl font-bold mt-1">
-                {bookings.filter((b) => b.cancelled_by === "owner").length}
+                {bookings.filter((b) =>
+                  b.cancelled_by === "owner" ||
+                  b.cancelled_by === "emergency" ||
+                  b.cancelled_by === "salon" ||
+                  (b.cancelled_by && b.cancelled_by !== "customer" && b.cancelled_by !== "admin")
+                ).length}
               </h3>
             </div>
             <AlertCircle className="h-8 w-8 text-orange-500/20" />
@@ -219,9 +264,23 @@ const CancellationsPage = () => {
                 ) : (
                   filteredBookings.map((b) => {
                     const isOwnerCancelled = b.cancelled_by === "owner" || b.cancelled_by === "emergency";
-                    const platformFeeRetained = isOwnerCancelled ? 0 : (b.platform_fee ?? 25);
+                    const isAdminCancelled = b.cancelled_by === "admin";
+                    // Platform fee: waived for owner/admin cancel, retained for customer cancel
+                    const platformFeeRetained = (isOwnerCancelled || isAdminCancelled) ? 0 : (b.platform_fee ?? 25);
                     const grandTotal = b.total_amount ?? 0;
-
+                    // Expected refund amount shown in button tooltip
+                    const expectedRefund = (isOwnerCancelled || isAdminCancelled)
+                      ? grandTotal
+                      : Math.max(0, grandTotal - (b.platform_fee ?? 25));
+                    // Show refund button: has amount, not yet refunded/rescheduled, and not a zero-payment booking
+                    const alreadySettled =
+                      b.refund_status === "refunded" ||
+                      b.refund_status === "rescheduled" ||
+                      b.payment_status === "refunded";
+                    const canRetryRefund =
+                      !alreadySettled &&
+                      grandTotal > 0 &&
+                      expectedRefund > 0;
                     return (
                       <tr key={b.id} className="hover:bg-muted/10 transition-colors">
                         <td className="p-4 space-y-1">
@@ -302,35 +361,32 @@ const CancellationsPage = () => {
                             ₹{platformFeeRetained}
                           </p>
                           <p className="text-[10px] text-muted-foreground">
-                            {isOwnerCancelled ? "Waived / Refunded" : "Retained Charge"}
+                            {(isOwnerCancelled || isAdminCancelled) ? "Waived / Full Refund" : "Retained Charge"}
                           </p>
                         </td>
-                        <td className="p-4">
-                          {b.payment_method === "razorpay" &&
-                            b.payment_status === "paid" &&
-                            (b.refund_status === "processing" ||
-                              b.refund_status === "pending_choice" ||
-                              b.refund_status === "failed" ||
-                              !b.refund_status) && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                disabled={processingId === b.id}
-                                onClick={() => handleManualRefund(b.id)}
-                                className="text-xs font-bold border-primary/30 text-primary hover:bg-primary/10 h-8"
-                              >
-                                {processingId === b.id ? "Processing..." : "Refund / Retry"}
-                              </Button>
-                            )}
-                          {b.refund_status === "rescheduled" && (
+                        <td className="p-4 space-y-1">
+                          {canRetryRefund ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={processingId === b.id}
+                              onClick={() => handleManualRefund(b.id)}
+                              className="text-xs font-bold border-primary/30 text-primary hover:bg-primary/10 h-8"
+                            >
+                              {processingId === b.id
+                                ? "Processing..."
+                                : `Refund ₹${expectedRefund}`}
+                            </Button>
+                          ) : b.refund_status === "rescheduled" ? (
                             <span className="text-xs text-muted-foreground flex items-center gap-1">
-                              <CheckCircle2 className="h-3.5 w-3.5 text-green-500" /> Complete
+                              <CheckCircle2 className="h-3.5 w-3.5 text-green-500" /> Rescheduled
                             </span>
-                          )}
-                          {b.refund_status === "refunded" && (
+                          ) : b.refund_status === "refunded" || b.payment_status === "refunded" ? (
                             <span className="text-xs text-muted-foreground flex items-center gap-1">
                               <CheckCircle2 className="h-3.5 w-3.5 text-green-500" /> Settled
                             </span>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">— No payment</span>
                           )}
                         </td>
                       </tr>
