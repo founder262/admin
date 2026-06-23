@@ -11,6 +11,16 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -18,7 +28,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Bell, Megaphone, Send, Search, Tag, CalendarDays, AlertTriangle } from "lucide-react";
+import { Bell, Megaphone, Send, Search, Tag, CalendarDays, AlertTriangle, Trash2, Eye } from "lucide-react";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
@@ -39,6 +49,9 @@ const NotificationsPage = () => {
   const [notifications, setNotifications] = useState<any[]>([]);
   const [search, setSearch] = useState("");
   const [showCompose, setShowCompose] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [viewTarget, setViewTarget] = useState<any | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [composeForm, setComposeForm] = useState({
     title: "",
     message: "",
@@ -122,6 +135,34 @@ const NotificationsPage = () => {
     }
   };
 
+  const handleDeleteNotification = async () => {
+    if (!deleteTarget) return;
+    setIsDeleting(true);
+    try {
+      const { data: res, error } = await supabase.functions.invoke('admin-api', {
+        body: {
+          action: 'DELETE',
+          table: 'notifications',
+          id: deleteTarget,
+        }
+      });
+
+      if (error || !res?.success) {
+        toast.error(res?.error?.message || error?.message || "Failed to delete notification.");
+        return;
+      }
+
+      toast.success("Notification deleted successfully.");
+      // Optimistic UI update — remove from local state immediately
+      setNotifications(prev => prev.filter(n => n.id !== deleteTarget));
+    } catch (err: any) {
+      toast.error(err.message || "An error occurred while deleting the notification.");
+    } finally {
+      setIsDeleting(false);
+      setDeleteTarget(null);
+    }
+  };
+
   return (
     <AdminLayout>
       <div className="space-y-6">
@@ -170,6 +211,23 @@ const NotificationsPage = () => {
                         <span className="capitalize">Target: {notif.target_type.replace('_', ' ')}</span>
                         <span>Read: {notif.read_count || 0}/{notif.total_recipients || 0}</span>
                       </div>
+                    </div>
+                    {/* ACTION BUTTONS */}
+                    <div className="flex items-center gap-2 ml-2 shrink-0">
+                      <button
+                        onClick={() => setViewTarget(notif)}
+                        className="h-8 w-8 rounded-lg border border-border bg-card flex items-center justify-center text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                        title="View notification details"
+                      >
+                        <Eye className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() => setDeleteTarget(notif.id)}
+                        className="h-8 w-8 rounded-lg border border-destructive/20 bg-destructive/5 flex items-center justify-center text-destructive transition-colors hover:bg-destructive/15 hover:border-destructive/40"
+                        title="Delete notification"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
                     </div>
                   </div>
                 )})}
@@ -228,6 +286,68 @@ const NotificationsPage = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* View Dialog */}
+      <Dialog open={!!viewTarget} onOpenChange={(open) => { if (!open) setViewTarget(null); }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <span className={`h-8 w-8 rounded-lg flex items-center justify-center ${viewTarget ? typeColors[viewTarget.notif_type || "system"]?.split(" ")[0] : "bg-muted"}`}>
+                {viewTarget && typeIcons[viewTarget.notif_type || "system"]}
+              </span>
+              <span>{viewTarget?.title || "Notification Details"}</span>
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div className="rounded-lg bg-muted/40 p-4 border border-border/50">
+              <p className="text-sm font-medium text-foreground whitespace-pre-wrap">{viewTarget?.message}</p>
+            </div>
+            <div className="grid grid-cols-2 gap-4 text-xs text-muted-foreground">
+              <div>
+                <span className="font-semibold block text-foreground">Created At</span>
+                {viewTarget && new Date(viewTarget.created_at).toLocaleString()}
+              </div>
+              <div>
+                <span className="font-semibold block text-foreground">Type</span>
+                <span className="capitalize">{viewTarget?.notif_type}</span>
+              </div>
+              <div>
+                <span className="font-semibold block text-foreground">Target Audience</span>
+                <span className="capitalize">{viewTarget?.target_type.replace(/_/g, ' ')}</span>
+              </div>
+              <div>
+                <span className="font-semibold block text-foreground">Recipients Read</span>
+                {viewTarget?.read_count || 0} / {viewTarget?.total_recipients || 0}
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setViewTarget(null)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this notification permanently?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently remove the notification from the database. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteNotification}
+              disabled={isDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isDeleting ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AdminLayout>
   );
 };

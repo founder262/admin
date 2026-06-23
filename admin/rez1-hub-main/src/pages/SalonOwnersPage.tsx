@@ -122,7 +122,7 @@ const SalonOwnersPage = () => {
       // Write audit notification for the owner
       await supabase.from("notifications").insert({
         title: "Your Salon Has Been Suspended",
-        message: `Reason: ${suspendReason}. Please contact support@rez1.in to resolve this.`,
+        message: `Reason: ${suspendReason}. Please contact contact@rez1.in to resolve this.`,
         notif_type: "system",
         target_type: "broadcast_owners",
         sent_by_admin: adminId,
