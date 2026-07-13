@@ -5,21 +5,29 @@ const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 async function check() {
-  const { data, error } = await supabase
-    .from('bookings')
-    .select('id, booking_ref, status, cancelled_by, created_at, updated_at')
-    .eq('status', 'cancelled')
-    .order('created_at', { ascending: false });
+  console.log("Checking platform_config row:");
+  const { data: config, error: configErr } = await supabase
+    .from('platform_config')
+    .select('*')
+    .maybeSingle();
   
-  if (error) {
-    console.error("Error:", error);
-    return;
+  if (configErr) {
+    console.error("Config error:", configErr);
+  } else {
+    console.log("Config keys:", Object.keys(config || {}));
+    console.log("Config value:", config);
   }
 
-  console.log("All Cancelled Bookings sorted by created_at desc:");
-  data.forEach((b, idx) => {
-    console.log(`${idx + 1}. Ref: ${b.booking_ref} | By: ${b.cancelled_by} | Created: ${b.created_at} | Updated: ${b.updated_at}`);
-  });
+  console.log("\nChecking if categories table exists:");
+  const { data: catData, error: catErr } = await supabase
+    .from('categories')
+    .select('*');
+  
+  if (catErr) {
+    console.log("categories table check failed:", catErr.message);
+  } else {
+    console.log("categories table exists! Rows:", catData);
+  }
 }
 
 check();

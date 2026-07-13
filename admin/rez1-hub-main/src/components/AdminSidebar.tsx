@@ -18,6 +18,7 @@ import {
   CreditCard,
   MapPin,
   XCircle,
+  Tag,
 } from "lucide-react";
 import { useState } from "react";
 import { useTheme } from "@/components/ThemeProvider";
@@ -35,6 +36,7 @@ const navItems = [
   { to: "/payments", icon: CreditCard, label: "Payments" },
   { to: "/cancellations", icon: XCircle, label: "Cancellations" },
   { to: "/locations", icon: MapPin, label: "Locations" },
+  { to: "/categories", icon: Tag, label: "Categories" },
   { to: "/analytics", icon: BarChart3, label: "Analytics" },
   { to: "/settings", icon: Settings, label: "Settings" },
 ];

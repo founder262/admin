@@ -8,6 +8,7 @@ import { useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import { adminApi } from "@/utils/adminApi";
+import { Switch } from "@/components/ui/switch";
 
 const SettingsPage = () => {
   const navigate = useNavigate();
@@ -19,6 +20,7 @@ const SettingsPage = () => {
     maxPersonsPerBooking: 10,
     defaultSlotDuration: 30,
     promoAutoplaySpeed: 4,
+    categoriesEnabled: true,
   });
 
   const [razorpayConfig, setRazorpayConfig] = useState({
@@ -51,7 +53,7 @@ const SettingsPage = () => {
         .select(
           "id, booking_fee, gst_percent, max_discount_cap, default_buffer_minutes, " +
           "max_booking_window_days, max_persons_per_booking, default_slot_duration, autoplay_speed_seconds, " +
-          "razorpay_enabled, razorpay_key_id, razorpay_key_secret, razorpay_account_id"
+          "razorpay_enabled, razorpay_key_id, razorpay_key_secret, razorpay_account_id, categories_enabled"
         )
         .maybeSingle();
 
@@ -67,6 +69,7 @@ const SettingsPage = () => {
           maxPersonsPerBooking: cfg.max_persons_per_booking ?? 10,
           defaultSlotDuration: cfg.default_slot_duration ?? 30,
           promoAutoplaySpeed: cfg.autoplay_speed_seconds ?? 4,
+          categoriesEnabled: cfg.categories_enabled ?? true,
         });
         setRazorpayConfig({
           razorpay_enabled: cfg.razorpay_enabled ?? false,
@@ -94,6 +97,7 @@ const SettingsPage = () => {
       max_persons_per_booking: globalConfig.maxPersonsPerBooking,
       default_slot_duration: globalConfig.defaultSlotDuration,
       autoplay_speed_seconds: globalConfig.promoAutoplaySpeed,
+      categories_enabled: globalConfig.categoriesEnabled,
     };
 
     let errorMsg = null;
@@ -223,6 +227,16 @@ const SettingsPage = () => {
             <div className="grid gap-2 col-span-2">
               <Label>Promo Banner Autoplay Speed (seconds)</Label>
               <Input type="number" value={globalConfig.promoAutoplaySpeed} onChange={e => setGlobalConfig(c => ({ ...c, promoAutoplaySpeed: Number(e.target.value) }))} />
+            </div>
+            <div className="grid gap-2 col-span-2 flex items-center justify-between border border-border p-3 rounded-lg mt-2 bg-muted/20">
+              <div>
+                <Label className="text-base font-semibold">Enable Customer Panel Categories</Label>
+                <p className="text-xs text-muted-foreground">If disabled, the Category section in the Customer App will be hidden completely and all salons will show at once.</p>
+              </div>
+              <Switch
+                checked={globalConfig.categoriesEnabled}
+                onCheckedChange={checked => setGlobalConfig(c => ({ ...c, categoriesEnabled: checked }))}
+              />
             </div>
           </div>
           <Button onClick={handleSaveConfig}>Save Configuration</Button>

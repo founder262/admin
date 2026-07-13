@@ -18,6 +18,7 @@ import ServicesPage from "./pages/ServicesPage";
 import BookingsPage from "./pages/BookingsPage";
 import PaymentsPage from "./pages/PaymentsPage";
 import LocationsPage from "./pages/LocationsPage";
+import CategoriesPage from "./pages/CategoriesPage";
 import CancellationsPage from "./pages/CancellationsPage";
 
 const queryClient = new QueryClient();
@@ -50,6 +51,7 @@ const App = () => (
             <Route path="/payments" element={<ProtectedRoute><PaymentsPage /></ProtectedRoute>} />
             <Route path="/cancellations" element={<ProtectedRoute><CancellationsPage /></ProtectedRoute>} />
             <Route path="/locations" element={<ProtectedRoute><LocationsPage /></ProtectedRoute>} />
+            <Route path="/categories" element={<ProtectedRoute><CategoriesPage /></ProtectedRoute>} />
             <Route path="/analytics" element={<ProtectedRoute><AnalyticsPage /></ProtectedRoute>} />
             <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
             <Route path="*" element={<NotFound />} />
