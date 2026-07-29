@@ -23,11 +23,12 @@ const SettingsPage = () => {
     categoriesEnabled: true,
   });
 
-  const [razorpayConfig, setRazorpayConfig] = useState({
-    razorpay_enabled: false,
-    razorpay_key_id: "",
-    razorpay_key_secret: "",
-    razorpay_account_id: "", // Admin's Razorpay linked account (for Route splits)
+  const [phonepeConfig, setPhonepeConfig] = useState({
+    phonepe_enabled: true,
+    phonepe_env: "UAT",
+    phonepe_merchant_id: "",
+    phonepe_salt_key: "",
+    phonepe_salt_index: "1",
   });
 
   const [adminProfile, setAdminProfile] = useState({
@@ -46,19 +47,16 @@ const SettingsPage = () => {
       email: "founder@rez1.in"
     });
 
-    // BUG A1 FIX — Fetch config using real column names (no 'key'/'value' columns exist)
     const fetchConfig = async () => {
       const { data, error } = await supabase
         .from("platform_config")
         .select(
           "id, booking_fee, gst_percent, max_discount_cap, default_buffer_minutes, " +
           "max_booking_window_days, max_persons_per_booking, default_slot_duration, autoplay_speed_seconds, " +
-          "razorpay_enabled, razorpay_key_id, razorpay_key_secret, razorpay_account_id, categories_enabled"
+          "phonepe_enabled, phonepe_env, phonepe_merchant_id, phonepe_salt_key, phonepe_salt_index, categories_enabled"
         )
         .maybeSingle();
 
-      // Cast to any — platform_config is not in Supabase generated types,
-      // so TS incorrectly widens data to GenericStringError. Runtime shape is correct.
       const cfg = data as any;
       if (cfg) {
         setGlobalConfig({
@@ -71,13 +69,13 @@ const SettingsPage = () => {
           promoAutoplaySpeed: cfg.autoplay_speed_seconds ?? 4,
           categoriesEnabled: cfg.categories_enabled ?? true,
         });
-        setRazorpayConfig({
-          razorpay_enabled: cfg.razorpay_enabled ?? false,
-          razorpay_key_id: cfg.razorpay_key_id ?? "",
-          razorpay_key_secret: cfg.razorpay_key_secret ?? "",
-          razorpay_account_id: cfg.razorpay_account_id ?? "",
+        setPhonepeConfig({
+          phonepe_enabled: cfg.phonepe_enabled ?? true,
+          phonepe_env: cfg.phonepe_env ?? "UAT",
+          phonepe_merchant_id: cfg.phonepe_merchant_id ?? "",
+          phonepe_salt_key: cfg.phonepe_salt_key ?? "",
+          phonepe_salt_index: cfg.phonepe_salt_index ?? "1",
         });
-        // Store the row id for targeted updates
         setPlatformConfigId(cfg.id);
       } else if (error) {
         console.warn("platform_config fetch error:", error.message);
@@ -87,7 +85,6 @@ const SettingsPage = () => {
     fetchConfig();
   }, []);
 
-  // BUG A1 FIX — Save using real column names and pk id
   const handleSaveConfig = async () => {
     const payload = {
       booking_fee: globalConfig.bookingFee,
@@ -119,12 +116,13 @@ const SettingsPage = () => {
     }
   };
 
-  const handleSaveRazorpay = async () => {
+  const handleSavePhonePe = async () => {
     const payload = {
-      razorpay_enabled: razorpayConfig.razorpay_enabled,
-      razorpay_key_id: razorpayConfig.razorpay_key_id,
-      razorpay_key_secret: razorpayConfig.razorpay_key_secret,
-      razorpay_account_id: razorpayConfig.razorpay_account_id,
+      phonepe_enabled: phonepeConfig.phonepe_enabled,
+      phonepe_env: phonepeConfig.phonepe_env,
+      phonepe_merchant_id: phonepeConfig.phonepe_merchant_id,
+      phonepe_salt_key: phonepeConfig.phonepe_salt_key,
+      phonepe_salt_index: phonepeConfig.phonepe_salt_index,
     };
 
     let errorMsg = null;
@@ -140,9 +138,9 @@ const SettingsPage = () => {
     }
 
     if (errorMsg) {
-      toast.error("Failed to save Razorpay settings: " + errorMsg);
+      toast.error("Failed to save PhonePe settings: " + errorMsg);
     } else {
-      toast.success("Razorpay configuration saved!");
+      toast.success("PhonePe configuration saved!");
     }
   };
 
@@ -174,7 +172,6 @@ const SettingsPage = () => {
               <Input value={adminProfile.email} readOnly className="bg-muted text-muted-foreground" />
             </div>
           </div>
-          {/* FEATURE A2 FIX — Save admin name to DB via adminApi */}
           <Button onClick={async () => {
             const adminId = localStorage.getItem("rez1_admin_id");
             localStorage.setItem("rez1_admin_name", adminProfile.name);
@@ -183,7 +180,6 @@ const SettingsPage = () => {
                 await adminApi.update("admin_users", adminId, { full_name: adminProfile.name });
                 toast.success("Profile updated!");
               } catch (err) {
-                // DB update may fail if RLS not set — local save still works
                 console.warn("DB profile save failed (check RLS policy on admin_users):", err);
                 toast.success("Profile saved locally. (DB update requires RLS policy — see guide)");
               }
@@ -244,53 +240,73 @@ const SettingsPage = () => {
 
         <Separator />
 
-        {/* Razorpay Route Configuration */}
+        {/* PhonePe Gateway Configuration */}
         <div className="rounded-xl border border-border bg-card p-6 space-y-6 animate-fade-in">
           <div>
-            <h2 className="text-lg font-semibold text-card-foreground">Razorpay Payment Gateway</h2>
+            <h2 className="text-lg font-semibold text-card-foreground">PhonePe Payment Gateway</h2>
             <p className="text-sm text-muted-foreground mt-1">
-              Configure Razorpay credentials for automatic payment splits (Route API). The platform fee goes to your admin account; the service amount goes to the salon owner's account.
+              Configure PhonePe credentials for customer checkout payments and automated refund processing.
             </p>
           </div>
           <div className="grid gap-4">
             <div className="flex items-center gap-3">
               <input
                 type="checkbox"
-                id="rzp-enabled"
-                checked={razorpayConfig.razorpay_enabled}
-                onChange={e => setRazorpayConfig(c => ({ ...c, razorpay_enabled: e.target.checked }))}
+                id="phonepe-enabled"
+                checked={phonepeConfig.phonepe_enabled}
+                onChange={e => setPhonepeConfig(c => ({ ...c, phonepe_enabled: e.target.checked }))}
                 className="h-4 w-4 rounded accent-primary"
               />
-              <Label htmlFor="rzp-enabled">Enable Razorpay Payments</Label>
+              <Label htmlFor="phonepe-enabled">Enable PhonePe Payments</Label>
             </div>
             <div className="grid gap-2">
-              <Label>Key ID (Public) <span className="text-muted-foreground text-xs">(shown to client)</span></Label>
+              <Label>Environment Mode</Label>
+              <div className="flex items-center gap-3">
+                <Button
+                  type="button"
+                  variant={phonepeConfig.phonepe_env === "UAT" ? "default" : "outline"}
+                  onClick={() => setPhonepeConfig(c => ({ ...c, phonepe_env: "UAT" }))}
+                  size="sm"
+                >
+                  UAT Sandbox
+                </Button>
+                <Button
+                  type="button"
+                  variant={phonepeConfig.phonepe_env === "PROD" ? "default" : "outline"}
+                  onClick={() => setPhonepeConfig(c => ({ ...c, phonepe_env: "PROD" }))}
+                  size="sm"
+                >
+                  Production (Live)
+                </Button>
+              </div>
+            </div>
+            <div className="grid gap-2">
+              <Label>Merchant ID</Label>
               <Input
-                placeholder="rzp_live_xxxxxxxxxxxxx"
-                value={razorpayConfig.razorpay_key_id}
-                onChange={e => setRazorpayConfig(c => ({ ...c, razorpay_key_id: e.target.value }))}
+                placeholder="PGTESTPAYUAT or M123456789"
+                value={phonepeConfig.phonepe_merchant_id}
+                onChange={e => setPhonepeConfig(c => ({ ...c, phonepe_merchant_id: e.target.value }))}
               />
             </div>
             <div className="grid gap-2">
-              <Label>Key Secret <span className="text-muted-foreground text-xs">(used server-side only — never exposed to customers)</span></Label>
+              <Label>Salt Key <span className="text-muted-foreground text-xs">(used server-side for payload hashing)</span></Label>
               <Input
                 type="password"
-                placeholder="••••••••••••••••••••"
-                value={razorpayConfig.razorpay_key_secret}
-                onChange={e => setRazorpayConfig(c => ({ ...c, razorpay_key_secret: e.target.value }))}
+                placeholder="••••••••-••••-••••-••••-••••••••••••"
+                value={phonepeConfig.phonepe_salt_key}
+                onChange={e => setPhonepeConfig(c => ({ ...c, phonepe_salt_key: e.target.value }))}
               />
             </div>
             <div className="grid gap-2">
-              <Label>Admin Razorpay Account ID <span className="text-muted-foreground text-xs">(Route — platform fee recipient)</span></Label>
+              <Label>Salt Index</Label>
               <Input
-                placeholder="acc_xxxxxxxxxxxxxxxxxx"
-                value={razorpayConfig.razorpay_account_id}
-                onChange={e => setRazorpayConfig(c => ({ ...c, razorpay_account_id: e.target.value }))}
+                placeholder="1"
+                value={phonepeConfig.phonepe_salt_index}
+                onChange={e => setPhonepeConfig(c => ({ ...c, phonepe_salt_index: e.target.value }))}
               />
-              <p className="text-xs text-muted-foreground">This is your Razorpay linked account ID (starts with <code>acc_</code>). The booking fee (platform charge) will be transferred here automatically on each payment.</p>
             </div>
           </div>
-          <Button onClick={handleSaveRazorpay}>Save Razorpay Settings</Button>
+          <Button onClick={handleSavePhonePe}>Save PhonePe Settings</Button>
         </div>
 
         <Separator />
