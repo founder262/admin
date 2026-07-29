@@ -135,8 +135,8 @@ const CancellationsPage = () => {
         b.refund_status === "processing" ||
         b.refund_status === "pending_choice" ||
         b.refund_status === "failed" ||
-        // null refund_status but has a paid Razorpay payment = needs action
-        (!b.refund_status && b.razorpay_payment_id && (b.total_amount ?? 0) > 0)
+        // null refund_status but has a paid payment = needs action
+        (!b.refund_status && (b.phonepe_transaction_id || b.phonepe_merchant_transaction_id || b.razorpay_payment_id || b.payment_status === 'paid') && (b.total_amount ?? 0) > 0)
       );
     }
     // Rescheduled: either the refund_status is rescheduled, or the booking status itself is rescheduled

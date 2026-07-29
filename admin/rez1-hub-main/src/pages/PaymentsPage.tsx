@@ -3,15 +3,23 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Smartphone, IndianRupee } from "lucide-react";
+import { Smartphone, IndianRupee, ShieldCheck } from "lucide-react";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { adminApi } from "@/utils/adminApi";
 
 const PaymentsPage = () => {
+  const [phonepeConfig, setPhonepeConfig] = useState({
+    enabled: true,
+    env: "UAT", // UAT or PROD
+    merchantId: "",
+    saltKey: "",
+    saltIndex: "1",
+  });
+
   const [razorpayConfig, setRazorpayConfig] = useState({
     enabled: false,
-    mode: "test", // test or live
+    mode: "test",
     keyId: "",
     keySecret: "",
   });
@@ -23,23 +31,31 @@ const PaymentsPage = () => {
     refundWindowHours: 24,
   });
 
-  // platform_config is a single-row table with direct columns
   const [configId, setConfigId] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchConfig = async () => {
       try {
-        // platform_config is a single row - fetch all columns
         const data = await adminApi.fetch("platform_config", "*");
         if (data && data.length > 0) {
           const row = data[0];
           setConfigId(row.id);
+
+          setPhonepeConfig({
+            enabled: row.phonepe_enabled ?? true,
+            env: row.phonepe_env ?? "UAT",
+            merchantId: row.phonepe_merchant_id ?? "",
+            saltKey: row.phonepe_salt_key ?? "",
+            saltIndex: row.phonepe_salt_index ?? "1",
+          });
+
           setRazorpayConfig({
             enabled: row.razorpay_enabled ?? false,
             mode: row.razorpay_mode ?? 'test',
             keyId: row.razorpay_key_id ?? '',
             keySecret: row.razorpay_key_secret ?? '',
           });
+
           setConfig({
             bookingFee: row.booking_fee ?? 25,
             processingDuration: row.default_buffer_minutes ?? 10,
@@ -54,22 +70,23 @@ const PaymentsPage = () => {
     fetchConfig();
   }, []);
 
-  const handleSaveRazorpay = async () => {
+  const handleSavePhonePe = async () => {
     try {
       const payload = {
-        razorpay_enabled: razorpayConfig.enabled,
-        razorpay_mode: razorpayConfig.mode,
-        razorpay_key_id: razorpayConfig.keyId,
-        razorpay_key_secret: razorpayConfig.keySecret,
+        phonepe_enabled: phonepeConfig.enabled,
+        phonepe_env: phonepeConfig.env,
+        phonepe_merchant_id: phonepeConfig.merchantId,
+        phonepe_salt_key: phonepeConfig.saltKey,
+        phonepe_salt_index: phonepeConfig.saltIndex,
       };
       if (configId) {
         await adminApi.update("platform_config", configId, payload);
       } else {
         await adminApi.insert("platform_config", payload);
       }
-      toast.success("Razorpay configuration saved");
+      toast.success("PhonePe Gateway configuration saved");
     } catch (error) {
-      toast.error("Failed to save Razorpay config");
+      toast.error("Failed to save PhonePe config");
     }
   };
 
@@ -100,40 +117,44 @@ const PaymentsPage = () => {
           <p className="text-muted-foreground mt-1">Manage payment gateways & fee settings</p>
         </div>
 
-        {/* Razorpay Configuration */}
+        {/* PhonePe Gateway Configuration */}
         <div className="rounded-xl border border-border bg-card p-6 space-y-4">
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-lg font-semibold text-card-foreground flex items-center gap-2">
-                <Smartphone className="h-5 w-5" /> Payment Gateway (Razorpay)
+                <Smartphone className="h-5 w-5 text-primary" /> PhonePe Payment Gateway
               </h2>
-              <p className="text-sm text-muted-foreground mt-1">Configure Razorpay for secure checkout transactions.</p>
+              <p className="text-sm text-muted-foreground mt-1">Configure PhonePe credentials for customer checkout.</p>
             </div>
             <div className="flex items-center gap-3">
-              <span className="text-sm font-medium">{razorpayConfig.enabled ? "Enabled" : "Disabled"}</span>
-              <Switch checked={razorpayConfig.enabled} onCheckedChange={v => setRazorpayConfig(prev => ({ ...prev, enabled: v }))} />
+              <span className="text-sm font-medium">{phonepeConfig.enabled ? "Enabled" : "Disabled"}</span>
+              <Switch checked={phonepeConfig.enabled} onCheckedChange={v => setPhonepeConfig(prev => ({ ...prev, enabled: v }))} />
             </div>
           </div>
           
-          {razorpayConfig.enabled && (
+          {phonepeConfig.enabled && (
              <div className="pt-4 border-t border-border grid grid-cols-2 gap-6 animate-fade-in">
                <div className="grid gap-2 col-span-2">
                  <Label>Environment Mode</Label>
                  <div className="flex items-center gap-4">
-                   <Button variant={razorpayConfig.mode === "test" ? "default" : "outline"} onClick={() => setRazorpayConfig(p => ({ ...p, mode: "test" }))} size="sm">Test Mode</Button>
-                   <Button variant={razorpayConfig.mode === "live" ? "default" : "outline"} onClick={() => setRazorpayConfig(p => ({ ...p, mode: "live" }))} size="sm">Live Mode</Button>
+                   <Button variant={phonepeConfig.env === "UAT" ? "default" : "outline"} onClick={() => setPhonepeConfig(p => ({ ...p, env: "UAT" }))} size="sm">UAT Sandbox</Button>
+                   <Button variant={phonepeConfig.env === "PROD" ? "default" : "outline"} onClick={() => setPhonepeConfig(p => ({ ...p, env: "PROD" }))} size="sm">Production (Live)</Button>
                  </div>
                </div>
                <div className="grid gap-2">
-                 <Label>Key ID</Label>
-                 <Input type="password" value={razorpayConfig.keyId} onChange={e => setRazorpayConfig(c => ({ ...c, keyId: e.target.value }))} placeholder="rzp_test_..." />
+                 <Label>Merchant ID</Label>
+                 <Input value={phonepeConfig.merchantId} onChange={e => setPhonepeConfig(c => ({ ...c, merchantId: e.target.value }))} placeholder="PGTESTPAYUAT or M123456..." />
                </div>
                <div className="grid gap-2">
-                 <Label>Key Secret</Label>
-                 <Input type="password" value={razorpayConfig.keySecret} onChange={e => setRazorpayConfig(c => ({ ...c, keySecret: e.target.value }))} placeholder="••••••••••••" />
+                 <Label>Salt Index</Label>
+                 <Input value={phonepeConfig.saltIndex} onChange={e => setPhonepeConfig(c => ({ ...c, saltIndex: e.target.value }))} placeholder="1" />
+               </div>
+               <div className="grid gap-2 col-span-2">
+                 <Label>Salt Key</Label>
+                 <Input type="password" value={phonepeConfig.saltKey} onChange={e => setPhonepeConfig(c => ({ ...c, saltKey: e.target.value }))} placeholder="••••••••-••••-••••-••••-••••••••••••" />
                </div>
                <div className="col-span-2">
-                 <Button onClick={handleSaveRazorpay} variant="outline" className="w-full">Save Gateway Keys</Button>
+                 <Button onClick={handleSavePhonePe} className="w-full">Save PhonePe Gateway Settings</Button>
                </div>
              </div>
           )}
