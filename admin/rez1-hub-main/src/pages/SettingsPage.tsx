@@ -27,6 +27,15 @@ const SettingsPage = () => {
     phonepe_enabled: true,
     phonepe_env: "UAT",
     phonepe_merchant_id: "",
+    phonepe_client_id: "",
+    phonepe_client_secret: "",
+    phonepe_client_version: "1",
+    phonepe_webhook_url: "https://api.rez1.in/api/payments/phonepe/webhook",
+    phonepe_webhook_username: "",
+    phonepe_webhook_password: "",
+    phonepe_success_url: "https://rez1.in/payment/success",
+    phonepe_failure_url: "https://rez1.in/payment/failed",
+    phonepe_cancel_url: "https://rez1.in/payment/cancel",
     phonepe_salt_key: "",
     phonepe_salt_index: "1",
   });
@@ -53,7 +62,9 @@ const SettingsPage = () => {
         .select(
           "id, booking_fee, gst_percent, max_discount_cap, default_buffer_minutes, " +
           "max_booking_window_days, max_persons_per_booking, default_slot_duration, autoplay_speed_seconds, " +
-          "phonepe_enabled, phonepe_env, phonepe_merchant_id, phonepe_salt_key, phonepe_salt_index, categories_enabled"
+          "phonepe_enabled, phonepe_env, phonepe_merchant_id, phonepe_client_id, phonepe_client_secret, " +
+          "phonepe_client_version, phonepe_webhook_url, phonepe_webhook_username, phonepe_webhook_password, " +
+          "phonepe_success_url, phonepe_failure_url, phonepe_cancel_url, phonepe_salt_key, phonepe_salt_index, categories_enabled"
         )
         .maybeSingle();
 
@@ -73,6 +84,15 @@ const SettingsPage = () => {
           phonepe_enabled: cfg.phonepe_enabled ?? true,
           phonepe_env: cfg.phonepe_env ?? "UAT",
           phonepe_merchant_id: cfg.phonepe_merchant_id ?? "",
+          phonepe_client_id: cfg.phonepe_client_id ?? "",
+          phonepe_client_secret: cfg.phonepe_client_secret ?? "",
+          phonepe_client_version: cfg.phonepe_client_version ?? "1",
+          phonepe_webhook_url: cfg.phonepe_webhook_url ?? "https://api.rez1.in/api/payments/phonepe/webhook",
+          phonepe_webhook_username: cfg.phonepe_webhook_username ?? "",
+          phonepe_webhook_password: cfg.phonepe_webhook_password ?? "",
+          phonepe_success_url: cfg.phonepe_success_url ?? "https://rez1.in/payment/success",
+          phonepe_failure_url: cfg.phonepe_failure_url ?? "https://rez1.in/payment/failed",
+          phonepe_cancel_url: cfg.phonepe_cancel_url ?? "https://rez1.in/payment/cancel",
           phonepe_salt_key: cfg.phonepe_salt_key ?? "",
           phonepe_salt_index: cfg.phonepe_salt_index ?? "1",
         });
@@ -121,6 +141,15 @@ const SettingsPage = () => {
       phonepe_enabled: phonepeConfig.phonepe_enabled,
       phonepe_env: phonepeConfig.phonepe_env,
       phonepe_merchant_id: phonepeConfig.phonepe_merchant_id,
+      phonepe_client_id: phonepeConfig.phonepe_client_id,
+      phonepe_client_secret: phonepeConfig.phonepe_client_secret,
+      phonepe_client_version: phonepeConfig.phonepe_client_version,
+      phonepe_webhook_url: phonepeConfig.phonepe_webhook_url,
+      phonepe_webhook_username: phonepeConfig.phonepe_webhook_username,
+      phonepe_webhook_password: phonepeConfig.phonepe_webhook_password,
+      phonepe_success_url: phonepeConfig.phonepe_success_url,
+      phonepe_failure_url: phonepeConfig.phonepe_failure_url,
+      phonepe_cancel_url: phonepeConfig.phonepe_cancel_url,
       phonepe_salt_key: phonepeConfig.phonepe_salt_key,
       phonepe_salt_index: phonepeConfig.phonepe_salt_index,
     };
@@ -243,9 +272,9 @@ const SettingsPage = () => {
         {/* PhonePe Gateway Configuration */}
         <div className="rounded-xl border border-border bg-card p-6 space-y-6 animate-fade-in">
           <div>
-            <h2 className="text-lg font-semibold text-card-foreground">PhonePe Payment Gateway</h2>
+            <h2 className="text-lg font-semibold text-card-foreground">PhonePe Payment Gateway Configuration</h2>
             <p className="text-sm text-muted-foreground mt-1">
-              Configure PhonePe credentials for customer checkout payments and automated refund processing.
+              Configure Client ID, Client Secret, Client Version, and Webhook credentials for PhonePe.
             </p>
           </div>
           <div className="grid gap-4">
@@ -259,6 +288,7 @@ const SettingsPage = () => {
               />
               <Label htmlFor="phonepe-enabled">Enable PhonePe Payments</Label>
             </div>
+
             <div className="grid gap-2">
               <Label>Environment Mode</Label>
               <div className="flex items-center gap-3">
@@ -268,7 +298,7 @@ const SettingsPage = () => {
                   onClick={() => setPhonepeConfig(c => ({ ...c, phonepe_env: "UAT" }))}
                   size="sm"
                 >
-                  UAT Sandbox
+                  Sandbox (UAT)
                 </Button>
                 <Button
                   type="button"
@@ -280,30 +310,96 @@ const SettingsPage = () => {
                 </Button>
               </div>
             </div>
-            <div className="grid gap-2">
-              <Label>Merchant ID</Label>
-              <Input
-                placeholder="PGTESTPAYUAT or M123456789"
-                value={phonepeConfig.phonepe_merchant_id}
-                onChange={e => setPhonepeConfig(c => ({ ...c, phonepe_merchant_id: e.target.value }))}
-              />
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label>Merchant ID</Label>
+                <Input
+                  placeholder="PGTESTPAYUAT or M123456789"
+                  value={phonepeConfig.phonepe_merchant_id}
+                  onChange={e => setPhonepeConfig(c => ({ ...c, phonepe_merchant_id: e.target.value }))}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label>Client ID</Label>
+                <Input
+                  placeholder="Client ID"
+                  value={phonepeConfig.phonepe_client_id}
+                  onChange={e => setPhonepeConfig(c => ({ ...c, phonepe_client_id: e.target.value }))}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label>Client Secret</Label>
+                <Input
+                  type="password"
+                  placeholder="••••••••••••••••••••"
+                  value={phonepeConfig.phonepe_client_secret}
+                  onChange={e => setPhonepeConfig(c => ({ ...c, phonepe_client_secret: e.target.value }))}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label>Client Version</Label>
+                <Input
+                  placeholder="1"
+                  value={phonepeConfig.phonepe_client_version}
+                  onChange={e => setPhonepeConfig(c => ({ ...c, phonepe_client_version: e.target.value }))}
+                />
+              </div>
             </div>
-            <div className="grid gap-2">
-              <Label>Salt Key <span className="text-muted-foreground text-xs">(used server-side for payload hashing)</span></Label>
-              <Input
-                type="password"
-                placeholder="••••••••-••••-••••-••••-••••••••••••"
-                value={phonepeConfig.phonepe_salt_key}
-                onChange={e => setPhonepeConfig(c => ({ ...c, phonepe_salt_key: e.target.value }))}
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label>Salt Index</Label>
-              <Input
-                placeholder="1"
-                value={phonepeConfig.phonepe_salt_index}
-                onChange={e => setPhonepeConfig(c => ({ ...c, phonepe_salt_index: e.target.value }))}
-              />
+
+            <div className="space-y-3 pt-2">
+              <div className="grid gap-2">
+                <Label>Webhook URL</Label>
+                <Input
+                  value={phonepeConfig.phonepe_webhook_url}
+                  onChange={e => setPhonepeConfig(c => ({ ...c, phonepe_webhook_url: e.target.value }))}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <Label>Webhook Username</Label>
+                  <Input
+                    placeholder="Username"
+                    value={phonepeConfig.phonepe_webhook_username}
+                    onChange={e => setPhonepeConfig(c => ({ ...c, phonepe_webhook_username: e.target.value }))}
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label>Webhook Password</Label>
+                  <Input
+                    type="password"
+                    placeholder="••••••••"
+                    value={phonepeConfig.phonepe_webhook_password}
+                    onChange={e => setPhonepeConfig(c => ({ ...c, phonepe_webhook_password: e.target.value }))}
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="grid gap-1">
+                  <Label className="text-xs">Success URL</Label>
+                  <Input
+                    className="text-xs"
+                    value={phonepeConfig.phonepe_success_url}
+                    onChange={e => setPhonepeConfig(c => ({ ...c, phonepe_success_url: e.target.value }))}
+                  />
+                </div>
+                <div className="grid gap-1">
+                  <Label className="text-xs">Failure URL</Label>
+                  <Input
+                    className="text-xs"
+                    value={phonepeConfig.phonepe_failure_url}
+                    onChange={e => setPhonepeConfig(c => ({ ...c, phonepe_failure_url: e.target.value }))}
+                  />
+                </div>
+                <div className="grid gap-1">
+                  <Label className="text-xs">Cancel URL</Label>
+                  <Input
+                    className="text-xs"
+                    value={phonepeConfig.phonepe_cancel_url}
+                    onChange={e => setPhonepeConfig(c => ({ ...c, phonepe_cancel_url: e.target.value }))}
+                  />
+                </div>
+              </div>
             </div>
           </div>
           <Button onClick={handleSavePhonePe}>Save PhonePe Settings</Button>
