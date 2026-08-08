@@ -6,7 +6,7 @@ import {
   AlertCircle, ArrowLeftRight, CheckCircle2, CircleDollarSign,
   Clock, HelpCircle, Scissors, Trash2, XCircle, Eye, X,
   User, Phone, Mail, CreditCard, Hash, CalendarDays, Receipt,
-  Banknote, RefreshCw, Info, Building2
+  Banknote, RefreshCw, Info, Building2, AlertTriangle
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
@@ -34,17 +34,32 @@ const TransactionModal = ({ booking, onClose }: { booking: any; onClose: () => v
   const refundStatusColor =
     booking.refund_status === "refunded" || booking.payment_status === "refunded"
       ? "text-green-400 bg-green-500/10 border-green-500/20"
-      : booking.refund_status === "processing" || booking.refund_status === "pending_choice"
+      : booking.refund_status === "processing"
       ? "text-amber-400 bg-amber-500/10 border-amber-500/20"
+      : booking.refund_status === "pending_choice"
+      ? "text-primary bg-primary/10 border-primary/20"
       : booking.refund_status === "rescheduled"
       ? "text-blue-400 bg-blue-500/10 border-blue-500/20"
-      : "text-red-400 bg-red-500/10 border-red-500/20";
+      : booking.refund_status === "failed"
+      ? "text-red-400 bg-red-500/10 border-red-500/20"
+      : booking.refund_status === "refund_requested"
+      ? "text-purple-400 bg-purple-500/10 border-purple-500/20 animate-pulse"
+      : "text-muted-foreground bg-muted/30 border-border";
 
   const refundStatusLabel =
-    booking.refund_status === "refunded" || booking.payment_status === "refunded" ? "✓ Refunded" :
-    booking.refund_status === "processing" ? "⏳ Processing" :
-    booking.refund_status === "pending_choice" ? "⌛ Pending Choice" :
-    booking.refund_status === "rescheduled" ? "🔄 Rescheduled" : "✗ No Refund / Failed";
+    booking.refund_status === "refunded" || booking.payment_status === "refunded"
+      ? "✓ Refunded — Money Released by Gateway"
+      : booking.refund_status === "processing"
+      ? "⏳ Refund Initiated — Awaiting Gateway Confirmation"
+      : booking.refund_status === "pending_choice"
+      ? "⌛ Awaiting Customer Choice (Refund or Reschedule)"
+      : booking.refund_status === "rescheduled"
+      ? "🔄 Rescheduled"
+      : booking.refund_status === "failed"
+      ? "text-red-400 bg-red-500/10 border-red-500/20"
+      : booking.refund_status === "refund_requested"
+      ? "🚨 Customer Escalated — Unreceived Refund Request"
+      : "— No Refund Applicable";
 
   const formatFull = (isoStr: string) => {
     if (!isoStr) return "N/A";
@@ -254,7 +269,13 @@ const CancellationsPage = () => {
         throw new Error(res?.error || error?.message || "Refund failed");
       }
 
-      toast.success(`Refund processed! Amount: ₹${res.refund_amount}. Status: ${res.refund_status}`);
+      if (res.refund_status === 'processing') {
+        toast.success(`Refund of ₹${res.refund_amount} initiated with PhonePe/Razorpay. Status will update to ‘Refunded’ once the gateway confirms the money has been released (usually within 1–90 minutes).`, { duration: 8000 });
+      } else if (res.refund_status === 'failed') {
+        toast.error(`Refund initiation failed. No valid payment transaction found or the gateway rejected the request.`);
+      } else {
+        toast.success(`Refund processed. Status: ${res.refund_status}`);
+      }
       fetchCancellations();
     } catch (err: any) {
       console.error("Manual refund error:", err);
@@ -446,6 +467,7 @@ const CancellationsPage = () => {
                     const alreadySettled =
                       b.refund_status === "refunded" ||
                       b.refund_status === "rescheduled" ||
+                      b.refund_status === "processing" || // refund already in flight — do not retry
                       b.payment_status === "refunded";
                     const canRetryRefund =
                       !alreadySettled &&
@@ -507,17 +529,29 @@ const CancellationsPage = () => {
                               <span className="inline-flex items-center gap-1 rounded-full bg-green-500/10 px-2.5 py-0.5 text-xs font-bold text-green-400 border border-green-500/20">
                                 ✓ Refunded
                               </span>
-                            ) : b.refund_status === "processing" || b.refund_status === "pending_choice" ? (
+                            ) : b.refund_status === "processing" ? (
                               <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2.5 py-0.5 text-xs font-bold text-amber-400 border border-amber-500/20">
-                                <Clock className="h-3 w-3 animate-spin" /> Pending choice/process
+                                <Clock className="h-3 w-3 animate-spin" /> Refund Initiated
+                              </span>
+                            ) : b.refund_status === "pending_choice" ? (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2.5 py-0.5 text-xs font-bold text-amber-400 border border-amber-500/20">
+                                <Clock className="h-3 w-3" /> Awaiting Customer
                               </span>
                             ) : b.refund_status === "rescheduled" ? (
                               <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/10 px-2.5 py-0.5 text-xs font-bold text-blue-400 border border-blue-500/20">
                                 🔄 Rescheduled
                               </span>
-                            ) : (
+                            ) : b.refund_status === "failed" ? (
                               <span className="inline-flex items-center gap-1 rounded-full bg-red-500/10 px-2.5 py-0.5 text-xs font-bold text-red-400 border border-red-500/20">
-                                ✗ No Refund / Failed
+                                ✗ Refund Failed
+                              </span>
+                            ) : b.refund_status === "refund_requested" ? (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-purple-500/15 px-2.5 py-0.5 text-xs font-bold text-purple-400 border border-purple-500/30 animate-pulse">
+                                <AlertTriangle className="h-3 w-3 text-purple-400" /> Customer Requested
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-muted/50 px-2.5 py-0.5 text-xs font-bold text-muted-foreground border border-border">
+                                — No Payment
                               </span>
                             )}
                           </div>
@@ -550,12 +584,26 @@ const CancellationsPage = () => {
                               variant="outline"
                               disabled={processingId === b.id}
                               onClick={() => handleManualRefund(b.id)}
-                              className="text-xs font-bold border-primary/30 text-primary hover:bg-primary/10 h-8 w-full"
+                              className={`text-xs font-bold h-8 w-full ${
+                                b.refund_status === "refund_requested"
+                                  ? "bg-purple-600 hover:bg-purple-500 text-white border-none shadow-lg shadow-purple-500/25"
+                                  : b.refund_status === "failed"
+                                  ? "bg-red-500/10 text-red-400 border-red-500/30 hover:bg-red-500/20"
+                                  : "border-primary/30 text-primary hover:bg-primary/10"
+                              }`}
                             >
                               {processingId === b.id
-                                ? "Processing..."
+                                ? "Initiating..."
+                                : b.refund_status === "refund_requested"
+                                ? `⚡ Process Request ₹${expectedRefund}`
+                                : b.refund_status === "failed"
+                                ? `Retry Refund ₹${expectedRefund}`
                                 : `Refund ₹${expectedRefund}`}
                             </Button>
+                          ) : b.refund_status === "processing" ? (
+                            <span className="text-xs text-amber-400 flex items-center gap-1">
+                              <Clock className="h-3.5 w-3.5 animate-spin" /> Refund sent to gateway
+                            </span>
                           ) : b.refund_status === "rescheduled" ? (
                             <span className="text-xs text-muted-foreground flex items-center gap-1">
                               <CheckCircle2 className="h-3.5 w-3.5 text-green-500" /> Rescheduled
@@ -564,6 +612,16 @@ const CancellationsPage = () => {
                             <span className="text-xs text-muted-foreground flex items-center gap-1">
                               <CheckCircle2 className="h-3.5 w-3.5 text-green-500" /> Settled
                             </span>
+                          ) : b.refund_status === "failed" ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={processingId === b.id}
+                              onClick={() => handleManualRefund(b.id)}
+                              className="text-xs font-bold border-red-500/30 text-red-400 hover:bg-red-500/10 h-8 w-full"
+                            >
+                              Retry Refund ₹{expectedRefund}
+                            </Button>
                           ) : (
                             <span className="text-xs text-muted-foreground">— No payment</span>
                           )}

@@ -50,17 +50,18 @@ Deno.serve(async (req) => {
     const PHONEPE_SALT_INDEX = config?.phonepe_salt_index || Deno.env.get('PHONEPE_SALT_INDEX') || '1'
     const PHONEPE_ENV = (config?.phonepe_env || Deno.env.get('PHONEPE_ENV') || 'UAT').toUpperCase()
 
-    const RAZORPAY_KEY_ID = config?.razorpay_key_id || Deno.env.get('RAZORPAY_KEY_ID')
-    const RAZORPAY_KEY_SECRET = config?.razorpay_key_secret || Deno.env.get('RAZORPAY_KEY_SECRET')
-
     // Helper for PhonePe Refund API
+    // IMPORTANT: A successful API response means PhonePe ACCEPTED the refund request.
+    // It does NOT mean the money has moved. The state is always PENDING initially.
+    // PhonePe sends a webhook callback (REFUND_SUCCESS / REFUND_ERROR) ~90s later
+    // which updates the DB via the verify-phonepe-payment function.
     const processPhonePeRefund = async (amount: number, reason: string) => {
       const refundTxnId = `REFUND_${booking.id.replace(/-/g, '').slice(0, 8)}_${Date.now()}`
       const baseUrl = PHONEPE_ENV === 'PROD'
         ? 'https://api.phonepe.com/apis/hermes/pg/v1/refund'
         : 'https://api-preprod.phonepe.com/apis/pg-sandbox/pg/v1/refund'
 
-      const payloadObj = {
+      const payloadObj: Record<string, any> = {
         merchantId: PHONEPE_MERCHANT_ID,
         merchantTransactionId: refundTxnId,
         originalTransactionId: booking.phonepe_merchant_transaction_id || booking.phonepe_transaction_id,
@@ -97,7 +98,23 @@ Deno.serve(async (req) => {
       })
 
       const refundData = await refundRes.json()
-      return { ok: refundRes.ok && refundData.success, data: refundData }
+      // ok = PhonePe accepted request (money still PENDING, not moved)
+      // refundTxnId is stored in DB so webhook/poll can match the refund callback
+      return { ok: refundRes.ok && refundData.success, data: refundData, refundTxnId }
+    }
+
+    // Helper for safe DB updates
+    const safeUpdateBooking = async (bId: string, fields: Record<string, any>) => {
+      const payload = { ...fields }
+      // Map refund_transaction_id to refund_id column which exists in DB
+      if (payload.refund_transaction_id && !payload.refund_id) {
+        payload.refund_id = payload.refund_transaction_id
+      }
+      const { error } = await supabaseAdmin.from('bookings').update(payload).eq('id', bId)
+      if (error && error.message?.includes('refund_transaction_id')) {
+        delete payload.refund_transaction_id
+        await supabaseAdmin.from('bookings').update(payload).eq('id', bId)
+      }
     }
 
     // Format time & date for notifications
@@ -128,59 +145,27 @@ Deno.serve(async (req) => {
       const isPaid = booking.payment_status === 'paid'
       const refundAmount = booking.total_amount
 
-      if (isPaid && (booking.phonepe_merchant_transaction_id || booking.payment_method === 'phonepe')) {
+      if (isPaid) {
         const phonepeRes = await processPhonePeRefund(refundAmount, 'Customer chose refund after salon cancellation')
-        const newRefundStatus = phonepeRes.ok ? 'refunded' : 'failed'
-        const newPaymentStatus = phonepeRes.ok ? 'refunded' : booking.payment_status
+        const newRefundStatus = phonepeRes.ok ? 'processing' : 'failed'
 
-        await supabaseAdmin.from('bookings').update({
+        await safeUpdateBooking(booking_id, {
           refund_status: newRefundStatus,
-          refund_amount: phonepeRes.ok ? refundAmount : (booking.refund_amount || 0),
-          payment_status: newPaymentStatus,
+          refund_amount: refundAmount,
+          refund_transaction_id: phonepeRes.ok ? phonepeRes.refundTxnId : null,
           updated_at: new Date().toISOString()
-        }).eq('id', booking_id)
+        })
 
         return new Response(
           JSON.stringify({ success: true, refund_amount: refundAmount, refund_status: newRefundStatus }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
         )
-      } else if (isPaid && booking.payment_method === 'razorpay' && booking.razorpay_payment_id) {
-        if (RAZORPAY_KEY_ID && RAZORPAY_KEY_SECRET) {
-          const rzpAuth = btoa(`${RAZORPAY_KEY_ID}:${RAZORPAY_KEY_SECRET}`)
-          const refundRes = await fetch(`https://api.razorpay.com/v1/payments/${booking.razorpay_payment_id}/refund`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "Authorization": `Basic ${rzpAuth}`
-            },
-            body: JSON.stringify({
-              amount: refundAmount * 100,
-              notes: { reason: 'Customer chose refund after salon cancellation' }
-            })
-          })
-
-          const refundData = await refundRes.json()
-          const newRefundStatus = refundRes.ok ? 'refunded' : 'failed'
-          const newPaymentStatus = refundRes.ok ? 'refunded' : booking.payment_status
-
-          await supabaseAdmin.from('bookings').update({
-            refund_status: newRefundStatus,
-            refund_amount: refundRes.ok ? refundAmount : (booking.refund_amount || 0),
-            payment_status: newPaymentStatus,
-            updated_at: new Date().toISOString()
-          }).eq('id', booking_id)
-
-          return new Response(
-            JSON.stringify({ success: true, refund_amount: refundAmount, refund_status: newRefundStatus }),
-            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
-          )
-        }
       }
 
-      await supabaseAdmin.from('bookings').update({
+      await safeUpdateBooking(booking_id, {
         refund_status: 'failed',
         updated_at: new Date().toISOString()
-      }).eq('id', booking_id)
+      })
 
       return new Response(
         JSON.stringify({ success: true, refund_amount: 0, refund_status: 'failed', message: 'No online payment found' }),
@@ -216,60 +201,18 @@ Deno.serve(async (req) => {
         ? booking.total_amount
         : Math.max(0, Math.min(serviceAmount, booking.total_amount - platformFee))
 
-      if (booking.phonepe_merchant_transaction_id || booking.payment_method === 'phonepe') {
-        const phonepeRes = await processPhonePeRefund(refundAmount, 'Admin manual refund')
-        const newRefundStatus = phonepeRes.ok ? 'refunded' : 'failed'
-        const newPaymentStatus = phonepeRes.ok ? 'refunded' : booking.payment_status
+      const phonepeRes = await processPhonePeRefund(refundAmount, 'Admin manual refund')
+      const newRefundStatus = phonepeRes.ok ? 'processing' : 'failed'
 
-        await supabaseAdmin.from('bookings').update({
-          refund_status: newRefundStatus,
-          refund_amount: phonepeRes.ok ? refundAmount : (booking.refund_amount || 0),
-          payment_status: newPaymentStatus,
-          updated_at: new Date().toISOString()
-        }).eq('id', booking_id)
-
-        return new Response(
-          JSON.stringify({ success: true, refund_amount: refundAmount, refund_status: newRefundStatus }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
-        )
-      } else if (booking.razorpay_payment_id && RAZORPAY_KEY_ID && RAZORPAY_KEY_SECRET) {
-        const rzpAuth = btoa(`${RAZORPAY_KEY_ID}:${RAZORPAY_KEY_SECRET}`)
-        const refundRes = await fetch(`https://api.razorpay.com/v1/payments/${booking.razorpay_payment_id}/refund`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Basic ${rzpAuth}`
-          },
-          body: JSON.stringify({
-            amount: refundAmount * 100,
-            notes: { reason: 'Admin manual refund - ' + (booking.cancelled_by || 'unknown') }
-          })
-        })
-
-        const refundData = await refundRes.json()
-        const newRefundStatus = refundRes.ok ? 'refunded' : 'failed'
-        const newPaymentStatus = refundRes.ok ? 'refunded' : booking.payment_status
-
-        await supabaseAdmin.from('bookings').update({
-          refund_status: newRefundStatus,
-          refund_amount: refundRes.ok ? refundAmount : (booking.refund_amount || 0),
-          payment_status: newPaymentStatus,
-          updated_at: new Date().toISOString()
-        }).eq('id', booking_id)
-
-        return new Response(
-          JSON.stringify({ success: true, refund_amount: refundAmount, refund_status: newRefundStatus }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
-        )
-      }
-
-      await supabaseAdmin.from('bookings').update({
-        refund_status: 'failed',
+      await safeUpdateBooking(booking_id, {
+        refund_status: newRefundStatus,
+        refund_amount: refundAmount,
+        refund_transaction_id: phonepeRes.ok ? phonepeRes.refundTxnId : null,
         updated_at: new Date().toISOString()
-      }).eq('id', booking_id)
+      })
 
       return new Response(
-        JSON.stringify({ success: true, refund_amount: 0, refund_status: 'failed', message: 'No payment transaction found for refund' }),
+        JSON.stringify({ success: true, refund_amount: refundAmount, refund_status: newRefundStatus }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
       )
     }
@@ -304,7 +247,7 @@ Deno.serve(async (req) => {
       if (updateErr) throw updateErr
 
       // Notify customer with refund/reschedule offer
-      const isPaid = booking.payment_status === 'paid' && booking.payment_method === 'razorpay'
+      const isPaid = booking.payment_status === 'paid'
       const notifMessage = cancelledBy === 'emergency'
         ? `🚨 Emergency! ${salonName} has had to close. Your booking on ${formattedDate} at ${formattedTime} has been cancelled. ${isPaid ? 'You can choose a full refund or reschedule your slot for free.' : 'Contact the salon for more information.'}`
         : `Your booking at ${salonName} on ${formattedDate} at ${formattedTime} was cancelled by the salon. ${isPaid ? 'You can choose a full refund or reschedule your slot for free.' : ''}`
@@ -326,59 +269,41 @@ Deno.serve(async (req) => {
     }
 
     // ─── CUSTOMER CANCELLATION ──────────────────────────────────────────────
-    // Process refund immediately (service amount minus platform fee).
     let payment_status = booking.payment_status
     let refund_amount = 0
     let refund_status = null
+    let refund_transaction_id = null
 
-    if (booking.payment_method === 'razorpay' && booking.razorpay_payment_id && booking.payment_status === 'paid') {
-      if (RAZORPAY_KEY_ID && RAZORPAY_KEY_SECRET) {
-        const rzpAuth = btoa(`${RAZORPAY_KEY_ID}:${RAZORPAY_KEY_SECRET}`)
+    const subtotal = Number(booking.subtotal ?? 0)
+    const offerDiscount = Number(booking.offer_discount ?? 0)
+    const platformFee = Number(booking.platform_fee ?? 25)
+    const serviceAmount = subtotal - offerDiscount
+    const baseRefundAmount = Math.max(0, Math.min(serviceAmount, booking.total_amount - platformFee))
 
-        const subtotal = Number(booking.subtotal ?? 0)
-        const offerDiscount = Number(booking.offer_discount ?? 0)
-        const platformFee = Number(booking.platform_fee ?? 25)
-        const serviceAmount = subtotal - offerDiscount
-        refund_amount = Math.max(0, Math.min(serviceAmount, booking.total_amount - platformFee))
-
-        const refundRes = await fetch(`https://api.razorpay.com/v1/payments/${booking.razorpay_payment_id}/refund`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Basic ${rzpAuth}`
-          },
-          body: JSON.stringify({
-            amount: refund_amount * 100,
-            notes: { reason: cancel_reason || 'Cancelled by customer' }
-          })
-        })
-
-        const refundData = await refundRes.json()
-        if (refundRes.ok) {
-          payment_status = 'refunded'
-          refund_status = 'refunded'
-        } else {
-          console.error("Razorpay refund failed:", refundData)
-          refund_status = 'processing' // retry-able
-        }
+    if (booking.payment_status === 'paid') {
+      refund_amount = baseRefundAmount
+      const phonepeRes = await processPhonePeRefund(refund_amount, cancel_reason || 'Cancelled by customer')
+      if (phonepeRes.ok) {
+        refund_status = 'processing'
+        refund_transaction_id = phonepeRes.refundTxnId
+      } else {
+        console.error('PhonePe customer cancellation refund failed:', phonepeRes.data)
+        refund_status = 'failed'
       }
     }
 
     // Update booking
-    const { error: updateErr } = await supabaseAdmin
-      .from('bookings')
-      .update({
-        status: 'cancelled',
-        cancelled_by: 'customer',
-        cancel_reason: cancel_reason || 'Cancelled by customer',
-        payment_status,
-        refund_status,
-        refund_amount: refund_amount || booking.refund_amount || 0,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', booking_id)
-
-    if (updateErr) throw updateErr
+    await safeUpdateBooking(booking_id, {
+      status: 'cancelled',
+      cancelled_by: 'customer',
+      cancel_reason: cancel_reason || 'Cancelled by customer',
+      payment_status,
+      refund_status,
+      refund_amount: refund_amount || booking.refund_amount || 0,
+      refund_id: refund_transaction_id,
+      refund_transaction_id,
+      updated_at: new Date().toISOString()
+    })
 
     // A. Notify customer
     const message = `Your booking at ${salonName} on ${formattedDate} at ${formattedTime} has been cancelled.`
@@ -386,8 +311,8 @@ Deno.serve(async (req) => {
       target_type: 'individual',
       target_id: booking.customer_id,
       title: '❌ Booking Cancelled',
-      message: payment_status === 'refunded'
-        ? `${message} A refund of ₹${refund_amount} has been initiated.`
+      message: refund_status === 'processing'
+        ? `${message} A refund of ₹${refund_amount} has been initiated and will be credited within 2-7 business days.`
         : message,
       notif_type: 'booking',
       is_read: false,

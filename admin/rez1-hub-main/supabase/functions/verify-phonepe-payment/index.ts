@@ -38,15 +38,29 @@ Deno.serve(async (req) => {
 
     let merchantTransactionId: string | null = null;
     let bookingId: string | null = null;
+    let isRefundCallback = false;
+    let refundTransactionId: string | null = null;
 
     // Parse body or query string
     if (req.method === "POST") {
       const body = await req.json().catch(() => ({}));
       if (body.response) {
-        // S2S Callback base64 decoded
+        // S2S Callback base64 decoded — could be a payment OR a refund callback
         try {
           const decoded = JSON.parse(atob(body.response));
-          merchantTransactionId = decoded.data?.merchantTransactionId;
+          const code: string = decoded.code || '';
+          if (code.startsWith('REFUND_')) {
+            // This is a refund webhook callback from PhonePe
+            isRefundCallback = true;
+            refundTransactionId = decoded.data?.merchantTransactionId || null;
+            merchantTransactionId = decoded.data?.merchantTransactionId || null;
+            // Store the code for handling below
+            (req as any)._refundCode = code;
+            (req as any)._refundDecoded = decoded;
+          } else {
+            // Regular payment callback
+            merchantTransactionId = decoded.data?.merchantTransactionId;
+          }
         } catch (_) {}
       } else {
         merchantTransactionId = body.merchantTransactionId;
@@ -62,6 +76,101 @@ Deno.serve(async (req) => {
     if (!merchantTransactionId && !bookingId) {
       return new Response(
         JSON.stringify({ success: true, message: "PhonePe Webhook verification endpoint active" }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // ── REFUND WEBHOOK HANDLER ───────────────────────────────────────────────
+    // PhonePe calls back with REFUND_SUCCESS or REFUND_ERROR to confirm money moved.
+    // This is the ONLY place refund_status legitimately becomes 'refunded' or stays 'failed'.
+    if (isRefundCallback && refundTransactionId) {
+      const refundCode: string = (req as any)._refundCode || '';
+      const isSuccess = refundCode === 'REFUND_SUCCESS';
+
+      console.log(`[verify-phonepe] Refund callback received: code=${refundCode}, txnId=${refundTransactionId}`);
+
+      const decoded = (req as any)._refundDecoded;
+      const originalTxnId = decoded?.data?.originalTransactionId;
+
+      // 1. Try finding booking by refund_id or refund_transaction_id
+      let refundBooking: any = null;
+      if (refundTransactionId) {
+        let { data } = await supabaseAdmin
+          .from('bookings')
+          .select('id, customer_id, total_amount, refund_amount, salons(name)')
+          .eq('refund_id', refundTransactionId)
+          .maybeSingle();
+
+        if (!data) {
+          const res = await supabaseAdmin
+            .from('bookings')
+            .select('id, customer_id, total_amount, refund_amount, salons(name)')
+            .eq('refund_transaction_id', refundTransactionId)
+            .maybeSingle();
+          data = res.data;
+        }
+        refundBooking = data;
+      }
+
+      // 2. Fallback: try finding by phonepe_merchant_transaction_id using originalTransactionId
+      if (!refundBooking && originalTxnId) {
+        const { data } = await supabaseAdmin
+          .from('bookings')
+          .select('id, customer_id, total_amount, refund_amount, salons(name)')
+          .eq('phonepe_merchant_transaction_id', originalTxnId)
+          .maybeSingle();
+        refundBooking = data;
+      }
+
+      // 3. Fallback: try finding by phonepe_transaction_id
+      if (!refundBooking && originalTxnId) {
+        const { data } = await supabaseAdmin
+          .from('bookings')
+          .select('id, customer_id, total_amount, refund_amount, salons(name)')
+          .eq('phonepe_transaction_id', originalTxnId)
+          .maybeSingle();
+        refundBooking = data;
+      }
+
+      if (refundBooking) {
+        const newRefundStatus = isSuccess ? 'refunded' : 'failed';
+        await supabaseAdmin.from('bookings').update({
+          refund_status: newRefundStatus,
+          payment_status: isSuccess ? 'refunded' : undefined,
+          updated_at: new Date().toISOString()
+        }).eq('id', refundBooking.id);
+
+        // Notify customer of final refund outcome
+        const salonName = (refundBooking as any).salons?.name || 'the salon';
+        if (isSuccess) {
+          await supabaseAdmin.from('notifications').insert({
+            target_type: 'individual',
+            target_id: refundBooking.customer_id,
+            title: '✅ Refund Successful',
+            message: `Your refund of ₹${refundBooking.refund_amount ?? refundBooking.total_amount} from ${salonName} has been processed and will appear in your account within 2-7 business days.`,
+            notif_type: 'booking',
+            is_read: false,
+            sent_by_admin: null,
+          });
+        } else {
+          await supabaseAdmin.from('notifications').insert({
+            target_type: 'individual',
+            target_id: refundBooking.customer_id,
+            title: '❌ Refund Failed',
+            message: `Unfortunately, your refund from ${salonName} could not be processed automatically. Please contact support for assistance.`,
+            notif_type: 'booking',
+            is_read: false,
+            sent_by_admin: null,
+          });
+        }
+
+        console.log(`[verify-phonepe] Refund ${newRefundStatus} for booking ${refundBooking.id}`);
+      } else {
+        console.warn(`[verify-phonepe] No booking found for refund_transaction_id: ${refundTransactionId}`);
+      }
+
+      return new Response(
+        JSON.stringify({ success: true, message: `Refund webhook processed: ${refundCode}` }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }

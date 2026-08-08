@@ -11,6 +11,8 @@ import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { adminApi } from "@/utils/adminApi";
 
+import { supabase } from "@/lib/supabase";
+
 const PaymentsPage = () => {
   const [phonepeConfig, setPhonepeConfig] = useState({
     enabled: true,
@@ -143,10 +145,15 @@ const PaymentsPage = () => {
     if (!window.confirm("Are you sure you want to trigger a manual refund for this booking?")) return;
     try {
       toast.loading("Processing refund...", { id: "refund-toast" });
-      const res = await adminApi.rpc("cancel-booking", {
-        booking_id: bookingId,
-        action: "admin_manual_refund"
+      const { data: res, error: fnErr } = await supabase.functions.invoke("cancel-booking", {
+        body: {
+          booking_id: bookingId,
+          action: "admin_manual_refund"
+        }
       });
+      if (fnErr || !res?.success) {
+        throw new Error(res?.error || fnErr?.message || "Refund failed");
+      }
       toast.success("Refund processed successfully!", { id: "refund-toast" });
       fetchPaymentData();
     } catch (err: any) {
@@ -392,6 +399,7 @@ const PaymentsPage = () => {
                   <th className="px-4 py-3">Amount</th>
                   <th className="px-4 py-3">Gateway</th>
                   <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3">Refund Status</th>
                   <th className="px-4 py-3">PhonePe Txn ID</th>
                   <th className="px-4 py-3">Merchant Order ID</th>
                   <th className="px-4 py-3">Created Time</th>
@@ -401,7 +409,7 @@ const PaymentsPage = () => {
               <tbody className="divide-y divide-border">
                 {filteredBookings.length === 0 ? (
                   <tr>
-                    <td colSpan={10} className="px-4 py-8 text-center text-muted-foreground">
+                    <td colSpan={11} className="px-4 py-8 text-center text-muted-foreground">
                       No payment transactions found.
                     </td>
                   </tr>
@@ -427,6 +435,33 @@ const PaymentsPage = () => {
                         }`}>
                           {b.payment_status?.toUpperCase() || "PENDING"}
                         </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        {b.refund_status ? (
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-bold ${
+                            b.refund_status === "refunded"
+                              ? "bg-green-500/10 text-green-600 dark:text-green-400"
+                              : b.refund_status === "processing"
+                              ? "bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                              : b.refund_status === "failed"
+                              ? "bg-red-500/10 text-red-500"
+                              : b.refund_status === "refund_requested"
+                              ? "bg-purple-500/20 text-purple-400 animate-pulse"
+                              : b.refund_status === "rescheduled"
+                              ? "bg-blue-500/10 text-blue-500"
+                              : "bg-muted/50 text-muted-foreground"
+                          }`}>
+                            {b.refund_status === "refunded" ? "✓ Refunded"
+                              : b.refund_status === "processing" ? "⏳ Initiated"
+                              : b.refund_status === "failed" ? "✗ Failed"
+                              : b.refund_status === "refund_requested" ? "🚨 Escalated"
+                              : b.refund_status === "rescheduled" ? "🔄 Rescheduled"
+                              : b.refund_status === "pending_choice" ? "⌛ Pending Choice"
+                              : b.refund_status}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
                       </td>
                       <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
                         {b.phonepe_transaction_id || "-"}
