@@ -2,41 +2,227 @@ import AdminLayout from "@/components/AdminLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
-import { AlertCircle, ArrowLeftRight, CheckCircle2, CircleDollarSign, Clock, HelpCircle, Scissors, Trash2, XCircle } from "lucide-react";
+import {
+  AlertCircle, ArrowLeftRight, CheckCircle2, CircleDollarSign,
+  Clock, HelpCircle, Scissors, Trash2, XCircle, Eye, X,
+  User, Phone, Mail, CreditCard, Hash, CalendarDays, Receipt,
+  Banknote, RefreshCw, Info, Building2
+} from "lucide-react";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
 
 type FilterType = "all" | "customer" | "owner" | "admin" | "refunded" | "pending_refund" | "rescheduled";
 
+/* ─── Transaction Detail Modal ─────────────────────────────────────────── */
+const TransactionModal = ({ booking, onClose }: { booking: any; onClose: () => void }) => {
+  if (!booking) return null;
+
+  const isOwnerCancelled = booking.cancelled_by === "owner" || booking.cancelled_by === "emergency";
+  const isAdminCancelled = booking.cancelled_by === "admin";
+  const platformFeeRetained = (isOwnerCancelled || isAdminCancelled) ? 0 : (booking.platform_fee ?? 25);
+  const grandTotal = booking.total_amount ?? 0;
+  const expectedRefund = (isOwnerCancelled || isAdminCancelled)
+    ? grandTotal
+    : Math.max(0, grandTotal - (booking.platform_fee ?? 25));
+
+  const cancelledByLabel =
+    booking.cancelled_by === "emergency" ? "🚨 Emergency Closure" :
+    booking.cancelled_by === "admin" ? "Admin Cancelled" :
+    isOwnerCancelled ? "Salon / Owner Cancelled" : "Customer Cancelled";
+
+  const refundStatusColor =
+    booking.refund_status === "refunded" || booking.payment_status === "refunded"
+      ? "text-green-400 bg-green-500/10 border-green-500/20"
+      : booking.refund_status === "processing" || booking.refund_status === "pending_choice"
+      ? "text-amber-400 bg-amber-500/10 border-amber-500/20"
+      : booking.refund_status === "rescheduled"
+      ? "text-blue-400 bg-blue-500/10 border-blue-500/20"
+      : "text-red-400 bg-red-500/10 border-red-500/20";
+
+  const refundStatusLabel =
+    booking.refund_status === "refunded" || booking.payment_status === "refunded" ? "✓ Refunded" :
+    booking.refund_status === "processing" ? "⏳ Processing" :
+    booking.refund_status === "pending_choice" ? "⌛ Pending Choice" :
+    booking.refund_status === "rescheduled" ? "🔄 Rescheduled" : "✗ No Refund / Failed";
+
+  const formatFull = (isoStr: string) => {
+    if (!isoStr) return "N/A";
+    return new Date(isoStr).toLocaleString("en-IN", {
+      day: "numeric", month: "long", year: "numeric",
+      hour: "2-digit", minute: "2-digit", second: "2-digit"
+    });
+  };
+
+  const Row = ({ icon: Icon, label, value, mono = false, highlight = false }: any) => (
+    <div className="flex items-start gap-3 py-2.5 border-b border-border/50 last:border-0">
+      <div className="mt-0.5 flex-shrink-0 w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center">
+        <Icon className="h-3.5 w-3.5 text-primary" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">{label}</p>
+        <p className={`text-sm font-medium mt-0.5 break-all ${mono ? "font-mono text-xs" : ""} ${highlight ? "text-primary font-bold" : "text-foreground"}`}>
+          {value || "N/A"}
+        </p>
+      </div>
+    </div>
+  );
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: "rgba(0,0,0,0.7)", backdropFilter: "blur(6px)" }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div
+        className="relative w-full max-w-2xl max-h-[92vh] overflow-y-auto rounded-2xl border border-border shadow-2xl"
+        style={{ background: "hsl(var(--card))" }}
+      >
+        {/* Header */}
+        <div className="sticky top-0 z-10 flex items-center justify-between px-6 py-4 border-b border-border"
+          style={{ background: "hsl(var(--card))" }}>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-primary/15 flex items-center justify-center">
+              <Receipt className="h-5 w-5 text-primary" />
+            </div>
+            <div>
+              <h2 className="text-base font-bold text-foreground">Transaction Details</h2>
+              <p className="text-xs text-muted-foreground font-mono">
+                {booking.booking_ref || `RZ-${booking.id?.slice(0, 6).toUpperCase()}`}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-5">
+
+          {/* Status Banner */}
+          <div className={`flex items-center gap-3 px-4 py-3 rounded-xl border text-sm font-semibold ${refundStatusColor}`}>
+            <Info className="h-4 w-4 flex-shrink-0" />
+            <span>Refund Status: {refundStatusLabel}</span>
+            <span className="ml-auto text-xs font-normal opacity-70">
+              Cancelled by: {cancelledByLabel}
+            </span>
+          </div>
+
+          {/* Customer Info */}
+          <section>
+            <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-2 flex items-center gap-2">
+              <User className="h-3.5 w-3.5" /> Customer Information
+            </h3>
+            <div className="rounded-xl border border-border bg-muted/20 px-4 py-1 divide-y divide-border/40">
+              <Row icon={User} label="Full Name" value={booking.customers?.full_name || "Guest Customer"} />
+              <Row icon={Phone} label="Phone" value={booking.customers?.phone || booking.customers?.mobile} />
+              <Row icon={Mail} label="Email" value={booking.customers?.email} />
+              <Row icon={Hash} label="Customer ID" value={booking.customer_id} mono />
+            </div>
+          </section>
+
+          {/* Booking Details */}
+          <section>
+            <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-2 flex items-center gap-2">
+              <CalendarDays className="h-3.5 w-3.5" /> Booking Details
+            </h3>
+            <div className="rounded-xl border border-border bg-muted/20 px-4 py-1 divide-y divide-border/40">
+              <Row icon={Hash} label="Booking ID" value={booking.id} mono />
+              <Row icon={Hash} label="Booking Ref" value={booking.booking_ref || `RZ-${booking.id?.slice(0, 6).toUpperCase()}`} />
+              <Row icon={Building2} label="Salon" value={booking.salons?.name} />
+              <Row icon={Hash} label="Salon ID" value={booking.salon_id} mono />
+              <Row icon={CalendarDays} label="Booking Date" value={booking.booking_date} />
+              <Row icon={Clock} label="Booking Time" value={booking.booking_time} />
+              <Row icon={CalendarDays} label="Booked On" value={formatFull(booking.created_at)} />
+              <Row icon={CalendarDays} label="Cancelled At" value={formatFull(booking.cancelled_at || booking.updated_at)} />
+              {booking.cancel_reason && (
+                <Row icon={Info} label="Cancel Reason" value={booking.cancel_reason} />
+              )}
+            </div>
+          </section>
+
+          {/* Payment & Transaction */}
+          <section>
+            <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-2 flex items-center gap-2">
+              <CreditCard className="h-3.5 w-3.5" /> Payment & Transaction
+            </h3>
+            <div className="rounded-xl border border-border bg-muted/20 px-4 py-1 divide-y divide-border/40">
+              <Row icon={Banknote} label="Total Amount Paid" value={`₹${grandTotal}`} highlight />
+              <Row icon={Banknote} label="Refund Amount" value={`₹${booking.refund_amount ?? 0} (of ₹${grandTotal})`} />
+              <Row icon={Banknote} label="Platform Fee Retained" value={`₹${platformFeeRetained}`} />
+              <Row icon={CreditCard} label="Payment Method" value={(booking.payment_method || "PhonePe").toUpperCase()} />
+              <Row icon={CreditCard} label="Payment Status" value={(booking.payment_status || "—").toUpperCase()} />
+              <Row icon={Hash} label="PhonePe Transaction ID" value={booking.phonepe_transaction_id} mono />
+              <Row icon={Hash} label="Merchant Transaction ID" value={booking.phonepe_merchant_transaction_id} mono />
+              {booking.razorpay_payment_id && (
+                <Row icon={Hash} label="Razorpay Payment ID" value={booking.razorpay_payment_id} mono />
+              )}
+              {booking.razorpay_order_id && (
+                <Row icon={Hash} label="Razorpay Order ID" value={booking.razorpay_order_id} mono />
+              )}
+            </div>
+          </section>
+
+          {/* Amount Breakdown */}
+          <section>
+            <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-2 flex items-center gap-2">
+              <Receipt className="h-3.5 w-3.5" /> Amount Breakdown
+            </h3>
+            <div className="rounded-xl border border-border bg-muted/20 divide-y divide-border/40">
+              {[
+                { label: "Service Amount", value: booking.service_amount ?? (grandTotal - (booking.platform_fee ?? 25) - (booking.gst_amount ?? 0)) },
+                { label: "Platform Fee", value: booking.platform_fee ?? 25 },
+                { label: "GST", value: booking.gst_amount ?? 0 },
+                { label: "Total", value: grandTotal, bold: true },
+              ].map(({ label, value, bold }) => (
+                <div key={label} className="flex items-center justify-between px-4 py-2.5">
+                  <span className={`text-sm ${bold ? "font-bold text-foreground" : "text-muted-foreground"}`}>{label}</span>
+                  <span className={`text-sm ${bold ? "font-bold text-primary" : "font-medium text-foreground"}`}>₹{value ?? 0}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+
+        </div>
+
+        {/* Footer */}
+        <div className="sticky bottom-0 border-t border-border px-6 py-4 flex justify-end gap-2"
+          style={{ background: "hsl(var(--card))" }}>
+          <Button size="sm" variant="outline" onClick={onClose}>Close</Button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/* ─── Main Page ─────────────────────────────────────────────────────────── */
 const CancellationsPage = () => {
   const [bookings, setBookings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<FilterType>("all");
   const [search, setSearch] = useState("");
   const [processingId, setProcessingId] = useState<string | null>(null);
+  const [selectedBooking, setSelectedBooking] = useState<any | null>(null);
 
   const fetchCancellations = async () => {
     setLoading(true);
     try {
-      // Use admin-api (service role key) to bypass RLS — same pattern as BookingsPage
-      // admin-api does not support OR filters, so we fetch all bookings and filter client-side
       const { data: res, error } = await supabase.functions.invoke("admin-api", {
         body: {
           action: "SELECT",
           table: "bookings",
-          query: "*, salons(name), customers(full_name)",
+          query: "*, salons(name), customers(full_name, phone, email)",
         },
       });
 
       if (error) throw error;
-      // admin-api returns { data: [...] }
       const allRows: any[] = res?.data || [];
-      // Filter to only cancelled + rescheduled
       const rows = allRows.filter(
         (b: any) => b.status === "cancelled" || b.status === "rescheduled"
       );
-      // Sort by updated_at descending (most recent first)
       rows.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
       setBookings(rows);
     } catch (error: any) {
@@ -83,27 +269,19 @@ const CancellationsPage = () => {
     const [h, m] = timeStr.split(":").map(Number);
     const hour12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
     const ampm = h >= 12 ? "PM" : "AM";
-    
     const formattedDate = new Date(dateStr + "T00:00:00").toLocaleDateString("en-IN", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
+      day: "numeric", month: "short", year: "numeric",
     });
-
     return `${formattedDate} · ${hour12}:${m.toString().padStart(2, "0")} ${ampm}`;
   };
 
   const formatCancelTime = (isoStr: string) => {
     if (!isoStr) return "N/A";
     return new Date(isoStr).toLocaleString("en-IN", {
-      day: "numeric",
-      month: "short",
-      hour: "2-digit",
-      minute: "2-digit"
+      day: "numeric", month: "short", hour: "2-digit", minute: "2-digit"
     });
   };
 
-  // Filter bookings
   const filteredBookings = bookings.filter((b) => {
     const matchesSearch =
       b.id.toLowerCase().includes(search.toLowerCase()) ||
@@ -115,7 +293,6 @@ const CancellationsPage = () => {
 
     if (filter === "all") return true;
     if (filter === "customer") return b.cancelled_by === "customer" || (!b.cancelled_by);
-    // Owner filter: catch owner, emergency, salon, or any other non-customer/non-admin initiated cancellation
     if (filter === "owner") return (
       b.cancelled_by === "owner" ||
       b.cancelled_by === "emergency" ||
@@ -124,7 +301,6 @@ const CancellationsPage = () => {
     );
     if (filter === "admin") return b.cancelled_by === "admin";
     if (filter === "refunded") return b.refund_status === "refunded" || b.payment_status === "refunded";
-    // Pending Refund: has a real payment, refund not yet completed or failed — exclude already refunded/rescheduled
     if (filter === "pending_refund") {
       const alreadyDone =
         b.refund_status === "refunded" ||
@@ -135,13 +311,10 @@ const CancellationsPage = () => {
         b.refund_status === "processing" ||
         b.refund_status === "pending_choice" ||
         b.refund_status === "failed" ||
-        // null refund_status but has a paid payment = needs action
         (!b.refund_status && (b.phonepe_transaction_id || b.phonepe_merchant_transaction_id || b.razorpay_payment_id || b.payment_status === 'paid') && (b.total_amount ?? 0) > 0)
       );
     }
-    // Rescheduled: either the refund_status is rescheduled, or the booking status itself is rescheduled
     if (filter === "rescheduled") return b.refund_status === "rescheduled" || b.status === "rescheduled";
-
     return true;
   });
 
@@ -265,14 +438,11 @@ const CancellationsPage = () => {
                   filteredBookings.map((b) => {
                     const isOwnerCancelled = b.cancelled_by === "owner" || b.cancelled_by === "emergency";
                     const isAdminCancelled = b.cancelled_by === "admin";
-                    // Platform fee: waived for owner/admin cancel, retained for customer cancel
                     const platformFeeRetained = (isOwnerCancelled || isAdminCancelled) ? 0 : (b.platform_fee ?? 25);
                     const grandTotal = b.total_amount ?? 0;
-                    // Expected refund amount shown in button tooltip
                     const expectedRefund = (isOwnerCancelled || isAdminCancelled)
                       ? grandTotal
                       : Math.max(0, grandTotal - (b.platform_fee ?? 25));
-                    // Show refund button: has amount, not yet refunded/rescheduled, and not a zero-payment booking
                     const alreadySettled =
                       b.refund_status === "refunded" ||
                       b.refund_status === "rescheduled" ||
@@ -330,7 +500,6 @@ const CancellationsPage = () => {
                               {b.cancel_reason}
                             </p>
                           )}
-
                         </td>
                         <td className="p-4 space-y-1.5">
                           <div className="flex items-center gap-1.5">
@@ -364,14 +533,24 @@ const CancellationsPage = () => {
                             {(isOwnerCancelled || isAdminCancelled) ? "Waived / Full Refund" : "Retained Charge"}
                           </p>
                         </td>
-                        <td className="p-4 space-y-1">
+                        <td className="p-4 space-y-2">
+                          {/* View Details Button */}
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setSelectedBooking(b)}
+                            className="text-xs font-bold h-8 gap-1.5 border-muted-foreground/20 hover:bg-muted/30 w-full"
+                          >
+                            <Eye className="h-3.5 w-3.5" /> View Details
+                          </Button>
+
                           {canRetryRefund ? (
                             <Button
                               size="sm"
                               variant="outline"
                               disabled={processingId === b.id}
                               onClick={() => handleManualRefund(b.id)}
-                              className="text-xs font-bold border-primary/30 text-primary hover:bg-primary/10 h-8"
+                              className="text-xs font-bold border-primary/30 text-primary hover:bg-primary/10 h-8 w-full"
                             >
                               {processingId === b.id
                                 ? "Processing..."
@@ -398,6 +577,14 @@ const CancellationsPage = () => {
           </div>
         </Card>
       </div>
+
+      {/* Transaction Detail Modal */}
+      {selectedBooking && (
+        <TransactionModal
+          booking={selectedBooking}
+          onClose={() => setSelectedBooking(null)}
+        />
+      )}
     </AdminLayout>
   );
 };
