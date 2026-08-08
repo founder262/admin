@@ -107,8 +107,8 @@ const PaymentsPage = () => {
         phonepe_success_url: phonepeConfig.successUrl,
         phonepe_failure_url: phonepeConfig.failureUrl,
         phonepe_cancel_url: phonepeConfig.cancelUrl,
-        phonepe_salt_key: phonepeConfig.saltKey,
-        phonepe_salt_index: phonepeConfig.saltIndex,
+        phonepe_salt_key: phonepeConfig.clientSecret,
+        phonepe_salt_index: "1",
       };
 
       if (configId) {
@@ -270,51 +270,34 @@ const PaymentsPage = () => {
                </div>
 
                {/* Client Credentials & Merchant Information */}
-               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                  <div className="grid gap-2">
-                   <Label>Merchant ID</Label>
+                   <Label className="font-semibold">Merchant ID</Label>
                    <Input 
                      value={phonepeConfig.merchantId} 
                      onChange={e => setPhonepeConfig(c => ({ ...c, merchantId: e.target.value }))} 
-                     placeholder="PGTESTPAYUAT or M123456789" 
+                     placeholder="M221F6V1RTPZ6" 
                    />
                  </div>
                  <div className="grid gap-2">
-                   <Label>Salt Key (API Key)</Label>
-                   <Input 
-                     type="password"
-                     value={phonepeConfig.saltKey} 
-                     onChange={e => setPhonepeConfig(c => ({ ...c, saltKey: e.target.value }))} 
-                     placeholder="Enter PhonePe Salt Key" 
-                   />
-                 </div>
-                 <div className="grid gap-2">
-                   <Label>Salt Index</Label>
-                   <Input 
-                     value={phonepeConfig.saltIndex} 
-                     onChange={e => setPhonepeConfig(c => ({ ...c, saltIndex: e.target.value }))} 
-                     placeholder="1" 
-                   />
-                 </div>
-                 <div className="grid gap-2">
-                   <Label>Client ID (PG 2.0 optional)</Label>
+                   <Label className="font-semibold">Client ID</Label>
                    <Input 
                      value={phonepeConfig.clientId} 
                      onChange={e => setPhonepeConfig(c => ({ ...c, clientId: e.target.value }))} 
-                     placeholder="Enter PhonePe Client ID" 
+                     placeholder="SU2607281522118831940246" 
                    />
                  </div>
                  <div className="grid gap-2">
-                   <Label>Client Secret (PG 2.0 optional)</Label>
+                   <Label className="font-semibold">Client Secret</Label>
                    <Input 
                      type="password"
                      value={phonepeConfig.clientSecret} 
                      onChange={e => setPhonepeConfig(c => ({ ...c, clientSecret: e.target.value }))} 
-                     placeholder="••••••••••••••••••••••••••••" 
+                     placeholder="Enter Client Secret from PhonePe Developer Settings" 
                    />
                  </div>
                  <div className="grid gap-2">
-                   <Label>Client Version</Label>
+                   <Label className="font-semibold">Client Version</Label>
                    <Input 
                      value={phonepeConfig.clientVersion} 
                      onChange={e => setPhonepeConfig(c => ({ ...c, clientVersion: e.target.value }))} 
