@@ -321,7 +321,24 @@ const SettingsPage = () => {
                 />
               </div>
               <div className="grid gap-2">
-                <Label>Client ID</Label>
+                <Label>Salt Key (API Key)</Label>
+                <Input
+                  type="password"
+                  placeholder="Enter PhonePe Salt Key"
+                  value={phonepeConfig.phonepe_salt_key}
+                  onChange={e => setPhonepeConfig(c => ({ ...c, phonepe_salt_key: e.target.value }))}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label>Salt Index</Label>
+                <Input
+                  placeholder="1"
+                  value={phonepeConfig.phonepe_salt_index}
+                  onChange={e => setPhonepeConfig(c => ({ ...c, phonepe_salt_index: e.target.value }))}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label>Client ID (PG 2.0 optional)</Label>
                 <Input
                   placeholder="Client ID"
                   value={phonepeConfig.phonepe_client_id}
@@ -329,7 +346,7 @@ const SettingsPage = () => {
                 />
               </div>
               <div className="grid gap-2">
-                <Label>Client Secret</Label>
+                <Label>Client Secret (PG 2.0 optional)</Label>
                 <Input
                   type="password"
                   placeholder="••••••••••••••••••••"

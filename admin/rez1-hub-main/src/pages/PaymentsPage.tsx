@@ -270,7 +270,7 @@ const PaymentsPage = () => {
                </div>
 
                {/* Client Credentials & Merchant Information */}
-               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                  <div className="grid gap-2">
                    <Label>Merchant ID</Label>
                    <Input 
@@ -280,7 +280,24 @@ const PaymentsPage = () => {
                    />
                  </div>
                  <div className="grid gap-2">
-                   <Label>Client ID</Label>
+                   <Label>Salt Key (API Key)</Label>
+                   <Input 
+                     type="password"
+                     value={phonepeConfig.saltKey} 
+                     onChange={e => setPhonepeConfig(c => ({ ...c, saltKey: e.target.value }))} 
+                     placeholder="Enter PhonePe Salt Key" 
+                   />
+                 </div>
+                 <div className="grid gap-2">
+                   <Label>Salt Index</Label>
+                   <Input 
+                     value={phonepeConfig.saltIndex} 
+                     onChange={e => setPhonepeConfig(c => ({ ...c, saltIndex: e.target.value }))} 
+                     placeholder="1" 
+                   />
+                 </div>
+                 <div className="grid gap-2">
+                   <Label>Client ID (PG 2.0 optional)</Label>
                    <Input 
                      value={phonepeConfig.clientId} 
                      onChange={e => setPhonepeConfig(c => ({ ...c, clientId: e.target.value }))} 
@@ -288,7 +305,7 @@ const PaymentsPage = () => {
                    />
                  </div>
                  <div className="grid gap-2">
-                   <Label>Client Secret</Label>
+                   <Label>Client Secret (PG 2.0 optional)</Label>
                    <Input 
                      type="password"
                      value={phonepeConfig.clientSecret} 
