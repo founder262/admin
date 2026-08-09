@@ -107,8 +107,8 @@ const PaymentsPage = () => {
         phonepe_success_url: phonepeConfig.successUrl,
         phonepe_failure_url: phonepeConfig.failureUrl,
         phonepe_cancel_url: phonepeConfig.cancelUrl,
-        phonepe_salt_key: phonepeConfig.clientSecret,
-        phonepe_salt_index: "1",
+        phonepe_salt_key: phonepeConfig.saltKey,
+        phonepe_salt_index: phonepeConfig.saltIndex,
       };
 
       if (configId) {
