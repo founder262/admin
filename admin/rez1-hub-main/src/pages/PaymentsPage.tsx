@@ -4,8 +4,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { 
-  Smartphone, IndianRupee, RefreshCw, CheckCircle2, XCircle, 
-  RotateCcw, ArrowUpRight, Search, FileText, Lock
+  CreditCard, IndianRupee, RefreshCw, CheckCircle2, XCircle, 
+  RotateCcw, ArrowUpRight, Search, FileText, Lock, Zap, ShieldCheck
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
@@ -14,21 +14,11 @@ import { adminApi } from "@/utils/adminApi";
 import { supabase } from "@/lib/supabase";
 
 const PaymentsPage = () => {
-  const [phonepeConfig, setPhonepeConfig] = useState({
+  const [razorpayConfig, setRazorpayConfig] = useState({
     enabled: true,
-    env: "UAT", // UAT or PROD
-    merchantId: "",
-    clientId: "",
-    clientSecret: "",
-    clientVersion: "1",
-    webhookUrl: "https://api.rez1.in/api/payments/phonepe/webhook",
-    webhookUsername: "",
-    webhookPassword: "",
-    successUrl: "https://rez1.in/payment/success",
-    failureUrl: "https://rez1.in/payment/failed",
-    cancelUrl: "https://rez1.in/payment/cancel",
-    saltKey: "",
-    saltIndex: "1",
+    keyId: "",
+    keySecret: "",
+    webhookSecret: "",
   });
 
   const [config, setConfig] = useState({
@@ -51,21 +41,11 @@ const PaymentsPage = () => {
         const row = data[0];
         setConfigId(row.id);
 
-        setPhonepeConfig({
-          enabled: row.phonepe_enabled ?? true,
-          env: row.phonepe_env ?? "UAT",
-          merchantId: row.phonepe_merchant_id ?? "",
-          clientId: row.phonepe_client_id ?? "",
-          clientSecret: row.phonepe_client_secret ?? "",
-          clientVersion: row.phonepe_client_version ?? "1",
-          webhookUrl: row.phonepe_webhook_url ?? "https://api.rez1.in/api/payments/phonepe/webhook",
-          webhookUsername: row.phonepe_webhook_username ?? "",
-          webhookPassword: row.phonepe_webhook_password ?? "",
-          successUrl: row.phonepe_success_url ?? "https://rez1.in/payment/success",
-          failureUrl: row.phonepe_failure_url ?? "https://rez1.in/payment/failed",
-          cancelUrl: row.phonepe_cancel_url ?? "https://rez1.in/payment/cancel",
-          saltKey: row.phonepe_salt_key ?? "",
-          saltIndex: row.phonepe_salt_index ?? "1",
+        setRazorpayConfig({
+          enabled: true,
+          keyId: row.razorpay_key_id ?? "",
+          keySecret: row.razorpay_key_secret ?? "",
+          webhookSecret: row.razorpay_webhook_secret ?? "",
         });
 
         setConfig({
@@ -92,23 +72,12 @@ const PaymentsPage = () => {
     fetchPaymentData();
   }, []);
 
-  const handleSavePhonePe = async () => {
+  const handleSaveRazorpay = async () => {
     try {
       const payload = {
-        phonepe_enabled: phonepeConfig.enabled,
-        phonepe_env: phonepeConfig.env,
-        phonepe_merchant_id: phonepeConfig.merchantId,
-        phonepe_client_id: phonepeConfig.clientId,
-        phonepe_client_secret: phonepeConfig.clientSecret,
-        phonepe_client_version: phonepeConfig.clientVersion,
-        phonepe_webhook_url: phonepeConfig.webhookUrl,
-        phonepe_webhook_username: phonepeConfig.webhookUsername,
-        phonepe_webhook_password: phonepeConfig.webhookPassword,
-        phonepe_success_url: phonepeConfig.successUrl,
-        phonepe_failure_url: phonepeConfig.failureUrl,
-        phonepe_cancel_url: phonepeConfig.cancelUrl,
-        phonepe_salt_key: phonepeConfig.saltKey,
-        phonepe_salt_index: phonepeConfig.saltIndex,
+        razorpay_key_id: razorpayConfig.keyId,
+        razorpay_key_secret: razorpayConfig.keySecret,
+        razorpay_webhook_secret: razorpayConfig.webhookSecret,
       };
 
       if (configId) {
@@ -116,9 +85,9 @@ const PaymentsPage = () => {
       } else {
         await adminApi.insert("platform_config", payload);
       }
-      toast.success("PhonePe Payment Gateway configuration saved successfully!");
+      toast.success("Razorpay Payment Gateway configuration saved successfully!");
     } catch (error: any) {
-      toast.error("Failed to save PhonePe config: " + (error.message || "Unknown error"));
+      toast.error("Failed to save Razorpay config: " + (error.message || "Unknown error"));
     }
   };
 
@@ -182,8 +151,8 @@ const PaymentsPage = () => {
     const term = searchTerm.toLowerCase();
     return (
       b.id?.toLowerCase().includes(term) ||
-      b.phonepe_transaction_id?.toLowerCase().includes(term) ||
-      b.phonepe_merchant_transaction_id?.toLowerCase().includes(term) ||
+      b.razorpay_payment_id?.toLowerCase().includes(term) ||
+      b.razorpay_order_id?.toLowerCase().includes(term) ||
       b.customers?.full_name?.toLowerCase().includes(term) ||
       b.salons?.name?.toLowerCase().includes(term)
     );
@@ -195,11 +164,11 @@ const PaymentsPage = () => {
         <div>
           <h1 className="text-2xl font-bold text-foreground">Payment Gateway & Analytics</h1>
           <p className="text-muted-foreground mt-1">
-            Manage PhonePe Client ID / Credentials configuration, inspect transaction logs, and process refunds.
+            Manage Razorpay credentials, inspect transaction logs, and process refunds.
           </p>
         </div>
 
-        {/* Phase 8 – Analytics Dashboard Cards */}
+        {/* Analytics Dashboard Cards */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
           <div className="rounded-xl border border-border bg-card p-4 space-y-1">
             <p className="text-xs font-semibold text-muted-foreground">Today's Collection</p>
@@ -227,161 +196,104 @@ const PaymentsPage = () => {
           </div>
         </div>
 
-        {/* Phase 1 – PhonePe Payment Gateway Configuration */}
+        {/* Razorpay Payment Gateway Configuration */}
         <div className="rounded-xl border border-border bg-card p-6 space-y-6">
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-lg font-semibold text-card-foreground flex items-center gap-2">
-                <Smartphone className="h-5 w-5 text-primary" /> PhonePe Payment Gateway Architecture
+                <CreditCard className="h-5 w-5 text-[#2C73FF]" />
+                Razorpay Payment Gateway
               </h2>
               <p className="text-sm text-muted-foreground mt-1">
-                Configure Client Credentials (Client ID, Client Secret & Client Version) for PhonePe v1/v2 Standard Checkout.
+                Configure your API Key ID, Key Secret and Webhook Secret for Razorpay live payment processing.
               </p>
             </div>
             <div className="flex items-center gap-3">
-              <span className="text-sm font-medium">{phonepeConfig.enabled ? "Enabled" : "Disabled"}</span>
-              <Switch checked={phonepeConfig.enabled} onCheckedChange={v => setPhonepeConfig(prev => ({ ...prev, enabled: v }))} />
+              <span className="text-sm font-medium">{razorpayConfig.enabled ? "Enabled" : "Disabled"}</span>
+              <Switch checked={razorpayConfig.enabled} onCheckedChange={v => setRazorpayConfig(prev => ({ ...prev, enabled: v }))} />
             </div>
           </div>
-          
-          {phonepeConfig.enabled && (
-             <div className="pt-4 border-t border-border space-y-6 animate-fade-in">
-               {/* Environment selection */}
-               <div className="grid gap-2">
-                 <Label className="font-semibold">Environment</Label>
-                 <div className="flex items-center gap-4">
-                   <Button 
-                     type="button"
-                     variant={phonepeConfig.env === "UAT" ? "default" : "outline"} 
-                     onClick={() => setPhonepeConfig(p => ({ ...p, env: "UAT" }))} 
-                     size="sm"
-                   >
-                     Sandbox (UAT Test Mode)
-                   </Button>
-                   <Button 
-                     type="button"
-                     variant={phonepeConfig.env === "PROD" ? "default" : "outline"} 
-                     onClick={() => setPhonepeConfig(p => ({ ...p, env: "PROD" }))} 
-                     size="sm"
-                   >
-                     Production (Live)
-                   </Button>
-                 </div>
-               </div>
 
-               {/* Client Credentials & Merchant Information */}
-               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                 <div className="grid gap-2">
-                   <Label className="font-semibold">Merchant ID</Label>
-                   <Input 
-                     value={phonepeConfig.merchantId} 
-                     onChange={e => setPhonepeConfig(c => ({ ...c, merchantId: e.target.value }))} 
-                     placeholder="M221F6V1RTPZ6" 
-                   />
-                 </div>
-                 <div className="grid gap-2">
-                   <Label className="font-semibold">Client ID</Label>
-                   <Input 
-                     value={phonepeConfig.clientId} 
-                     onChange={e => setPhonepeConfig(c => ({ ...c, clientId: e.target.value }))} 
-                     placeholder="SU2607281522118831940246" 
-                   />
-                 </div>
-                 <div className="grid gap-2">
-                   <Label className="font-semibold">Client Secret</Label>
-                   <Input 
-                     type="password"
-                     value={phonepeConfig.clientSecret} 
-                     onChange={e => setPhonepeConfig(c => ({ ...c, clientSecret: e.target.value }))} 
-                     placeholder="Enter Client Secret from PhonePe Developer Settings" 
-                   />
-                 </div>
-                 <div className="grid gap-2">
-                   <Label className="font-semibold">Client Version</Label>
-                   <Input 
-                     value={phonepeConfig.clientVersion} 
-                     onChange={e => setPhonepeConfig(c => ({ ...c, clientVersion: e.target.value }))} 
-                     placeholder="1" 
-                   />
-                 </div>
-               </div>
+          {/* Razorpay Welcome Offer Banner */}
+          <div className="p-4 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-start gap-3">
+            <Zap className="h-5 w-5 text-blue-400 mt-0.5 flex-shrink-0" />
+            <div className="text-sm space-y-1">
+              <p className="font-semibold text-blue-300">🎉 Razorpay Welcome Offer — Zero Transaction Fees!</p>
+              <p className="text-blue-400/80 text-xs">New merchants activated on or after <strong>1 July 2026</strong> get <strong>₹5,00,000 free GMV</strong> (zero platform fees) for <strong>90 days</strong> from KYC activation. No code needed — credits are applied automatically.</p>
+            </div>
+          </div>
 
-               {/* Webhook & Callback Configuration */}
-               <div className="space-y-4 pt-4 border-t border-border">
-                 <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                   <Lock className="h-4 w-4 text-primary" /> Webhooks & Callback Endpoints
-                 </h3>
-                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                   <div className="grid gap-2 md:col-span-2">
-                     <Label>Webhook URL</Label>
-                     <Input 
-                       value={phonepeConfig.webhookUrl} 
-                       onChange={e => setPhonepeConfig(c => ({ ...c, webhookUrl: e.target.value }))} 
-                       placeholder="https://api.rez1.in/api/payments/phonepe/webhook" 
-                     />
-                   </div>
-                   <div className="grid gap-2">
-                     <Label>Webhook Username</Label>
-                     <Input 
-                       value={phonepeConfig.webhookUsername} 
-                       onChange={e => setPhonepeConfig(c => ({ ...c, webhookUsername: e.target.value }))} 
-                       placeholder="rez1_webhook_user" 
-                     />
-                   </div>
-                   <div className="grid gap-2">
-                     <Label>Webhook Password</Label>
-                     <Input 
-                       type="password"
-                       value={phonepeConfig.webhookPassword} 
-                       onChange={e => setPhonepeConfig(c => ({ ...c, webhookPassword: e.target.value }))} 
-                       placeholder="••••••••••••••••" 
-                     />
-                   </div>
-                   <div className="grid gap-2">
-                     <Label>Success URL</Label>
-                     <Input 
-                       value={phonepeConfig.successUrl} 
-                       onChange={e => setPhonepeConfig(c => ({ ...c, successUrl: e.target.value }))} 
-                       placeholder="https://rez1.in/payment/success" 
-                     />
-                   </div>
-                   <div className="grid gap-2">
-                     <Label>Failure URL</Label>
-                     <Input 
-                       value={phonepeConfig.failureUrl} 
-                       onChange={e => setPhonepeConfig(c => ({ ...c, failureUrl: e.target.value }))} 
-                       placeholder="https://rez1.in/payment/failed" 
-                     />
-                   </div>
-                   <div className="grid gap-2 md:col-span-2">
-                     <Label>Cancel URL</Label>
-                     <Input 
-                       value={phonepeConfig.cancelUrl} 
-                       onChange={e => setPhonepeConfig(c => ({ ...c, cancelUrl: e.target.value }))} 
-                       placeholder="https://rez1.in/payment/cancel" 
-                     />
-                   </div>
-                 </div>
-               </div>
+          {razorpayConfig.enabled && (
+            <div className="pt-4 border-t border-border space-y-6 animate-fade-in">
+              {/* API Credentials */}
+              <div>
+                <h3 className="text-sm font-semibold text-foreground flex items-center gap-2 mb-4">
+                  <ShieldCheck className="h-4 w-4 text-primary" /> API Credentials
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid gap-2 md:col-span-2">
+                    <Label className="font-semibold">Key ID</Label>
+                    <Input
+                      value={razorpayConfig.keyId}
+                      onChange={e => setRazorpayConfig(c => ({ ...c, keyId: e.target.value }))}
+                      placeholder="rzp_live_xxxxxxxxxxxxxxxx"
+                    />
+                    <p className="text-xs text-muted-foreground">Found in Razorpay Dashboard → Settings → API Keys</p>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label className="font-semibold">Key Secret</Label>
+                    <Input
+                      type="password"
+                      value={razorpayConfig.keySecret}
+                      onChange={e => setRazorpayConfig(c => ({ ...c, keySecret: e.target.value }))}
+                      placeholder="Enter Key Secret"
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label className="font-semibold">Webhook Secret</Label>
+                    <Input
+                      type="password"
+                      value={razorpayConfig.webhookSecret}
+                      onChange={e => setRazorpayConfig(c => ({ ...c, webhookSecret: e.target.value }))}
+                      placeholder="Enter Webhook Secret"
+                    />
+                  </div>
+                </div>
+              </div>
 
-               <Button onClick={handleSavePhonePe} className="w-full md:w-auto">
-                 Save PhonePe Configuration
-               </Button>
-             </div>
+              {/* Webhook Info */}
+              <div className="space-y-3 pt-4 border-t border-border">
+                <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  <Lock className="h-4 w-4 text-primary" /> Webhook & Callback Setup
+                </h3>
+                <div className="p-3 rounded-lg bg-muted/30 border border-border text-xs text-muted-foreground space-y-2">
+                  <p><strong className="text-foreground">Webhook URL</strong> (register in Razorpay Dashboard → Settings → Webhooks):</p>
+                  <code className="block bg-background border border-border rounded px-3 py-2 text-[11px] text-primary break-all">
+                    {`https://[your-project-ref].supabase.co/functions/v1/razorpay-webhook`}
+                  </code>
+                  <p className="pt-1"><strong className="text-foreground">Events to enable:</strong> payment.captured · payment.failed · refund.processed · order.paid</p>
+                  <p><strong className="text-foreground">Active redirect routes:</strong> /payment/success · /payment/failed · /payment/cancel</p>
+                </div>
+              </div>
+
+              <Button onClick={handleSaveRazorpay} className="w-full md:w-auto">
+                Save Razorpay Configuration
+              </Button>
+            </div>
           )}
         </div>
 
-        {/* Phase 8 – Payment Transactions Table */}
+        {/* Payment Transactions Table */}
         <div className="rounded-xl border border-border bg-card p-6 space-y-4">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
               <h2 className="text-lg font-semibold text-card-foreground">Payment Transactions</h2>
-              <p className="text-sm text-muted-foreground">Detailed logs of customer bookings, PhonePe transaction IDs & statuses.</p>
+              <p className="text-sm text-muted-foreground">Detailed logs of customer bookings, Razorpay order IDs & payment statuses.</p>
             </div>
             <div className="relative w-full md:w-72">
               <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search transaction, booking, or customer..."
+                placeholder="Search by order ID, payment ID, or customer..."
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
                 className="pl-9"
@@ -400,8 +312,8 @@ const PaymentsPage = () => {
                   <th className="px-4 py-3">Gateway</th>
                   <th className="px-4 py-3">Status</th>
                   <th className="px-4 py-3">Refund Status</th>
-                  <th className="px-4 py-3">PhonePe Txn ID</th>
-                  <th className="px-4 py-3">Merchant Order ID</th>
+                  <th className="px-4 py-3">Razorpay Order ID</th>
+                  <th className="px-4 py-3">Razorpay Payment ID</th>
                   <th className="px-4 py-3">Created Time</th>
                   <th className="px-4 py-3 text-right">Actions</th>
                 </tr>
@@ -410,7 +322,7 @@ const PaymentsPage = () => {
                 {filteredBookings.length === 0 ? (
                   <tr>
                     <td colSpan={11} className="px-4 py-8 text-center text-muted-foreground">
-                      No payment transactions found.
+                      {loadingBookings ? "Loading transactions..." : "No payment transactions found."}
                     </td>
                   </tr>
                 ) : (
@@ -421,8 +333,8 @@ const PaymentsPage = () => {
                       <td className="px-4 py-3 text-muted-foreground">{b.salons?.name || "Salon"}</td>
                       <td className="px-4 py-3 font-bold text-foreground">₹{b.total_amount || 0}</td>
                       <td className="px-4 py-3">
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-primary/10 text-primary">
-                          {b.payment_method?.toUpperCase() || "PHONEPE"}
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-[#2C73FF]/10 text-[#2C73FF]">
+                          {b.payment_method?.toUpperCase() || "RAZORPAY"}
                         </span>
                       </td>
                       <td className="px-4 py-3">
@@ -464,10 +376,10 @@ const PaymentsPage = () => {
                         )}
                       </td>
                       <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
-                        {b.phonepe_transaction_id || "-"}
+                        {b.razorpay_order_id || "-"}
                       </td>
                       <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
-                        {b.phonepe_merchant_transaction_id || b.id?.slice(0, 10) || "-"}
+                        {b.razorpay_payment_id || "-"}
                       </td>
                       <td className="px-4 py-3 text-xs text-muted-foreground">
                         {b.created_at ? new Date(b.created_at).toLocaleString("en-IN") : "-"}
@@ -475,9 +387,9 @@ const PaymentsPage = () => {
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-2">
                           {b.payment_status === "paid" && b.refund_status !== "refunded" && (
-                            <Button 
-                              size="sm" 
-                              variant="outline" 
+                            <Button
+                              size="sm"
+                              variant="outline"
                               className="text-xs h-7 text-amber-600 border-amber-500/30 hover:bg-amber-500/10"
                               onClick={() => handleTriggerRefund(b.id)}
                             >
@@ -529,4 +441,3 @@ const PaymentsPage = () => {
 };
 
 export default PaymentsPage;
-

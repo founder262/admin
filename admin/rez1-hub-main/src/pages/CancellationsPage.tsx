@@ -168,16 +168,15 @@ const TransactionModal = ({ booking, onClose }: { booking: any; onClose: () => v
               <Row icon={Banknote} label="Total Amount Paid" value={`₹${grandTotal}`} highlight />
               <Row icon={Banknote} label="Refund Amount" value={`₹${booking.refund_amount ?? 0} (of ₹${grandTotal})`} />
               <Row icon={Banknote} label="Platform Fee Retained" value={`₹${platformFeeRetained}`} />
-              <Row icon={CreditCard} label="Payment Method" value={(booking.payment_method || "PhonePe").toUpperCase()} />
+              <Row icon={CreditCard} label="Payment Method" value={(booking.payment_method || "Razorpay").toUpperCase()} />
               <Row icon={CreditCard} label="Payment Status" value={(booking.payment_status || "—").toUpperCase()} />
-              <Row icon={Hash} label="PhonePe Transaction ID" value={booking.phonepe_transaction_id} mono />
-              <Row icon={Hash} label="Merchant Transaction ID" value={booking.phonepe_merchant_transaction_id} mono />
-              {booking.razorpay_payment_id && (
-                <Row icon={Hash} label="Razorpay Payment ID" value={booking.razorpay_payment_id} mono />
-              )}
               {booking.razorpay_order_id && (
                 <Row icon={Hash} label="Razorpay Order ID" value={booking.razorpay_order_id} mono />
               )}
+              {booking.razorpay_payment_id && (
+                <Row icon={Hash} label="Razorpay Payment ID" value={booking.razorpay_payment_id} mono />
+              )}
+
             </div>
           </section>
 
@@ -270,7 +269,7 @@ const CancellationsPage = () => {
       }
 
       if (res.refund_status === 'processing') {
-        toast.success(`Refund of ₹${res.refund_amount} initiated with PhonePe/Razorpay. Status will update to ‘Refunded’ once the gateway confirms the money has been released (usually within 1–90 minutes).`, { duration: 8000 });
+        toast.success(`Refund of ₹${res.refund_amount} initiated via Razorpay. Status will update to 'Refunded' once the gateway confirms the money has been released (typically within 5–7 business days).`, { duration: 8000 });
       } else if (res.refund_status === 'failed') {
         toast.error(`Refund initiation failed. No valid payment transaction found or the gateway rejected the request.`);
       } else {
@@ -332,7 +331,7 @@ const CancellationsPage = () => {
         b.refund_status === "processing" ||
         b.refund_status === "pending_choice" ||
         b.refund_status === "failed" ||
-        (!b.refund_status && (b.phonepe_transaction_id || b.phonepe_merchant_transaction_id || b.razorpay_payment_id || b.payment_status === 'paid') && (b.total_amount ?? 0) > 0)
+        (!b.refund_status && (b.razorpay_payment_id || b.razorpay_order_id || b.payment_status === 'paid') && (b.total_amount ?? 0) > 0)
       );
     }
     if (filter === "rescheduled") return b.refund_status === "rescheduled" || b.status === "rescheduled";

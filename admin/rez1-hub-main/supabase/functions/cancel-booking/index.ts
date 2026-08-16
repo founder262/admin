@@ -36,71 +36,54 @@ Deno.serve(async (req) => {
       throw new Error('Booking not found')
     }
 
-    // 2. Fetch Gateway credentials from platform_config table
+    // 2. Fetch Razorpay credentials from platform_config table
     const { data: config } = await supabaseAdmin
       .from('platform_config')
-      .select('phonepe_merchant_id, phonepe_client_id, phonepe_client_secret, phonepe_client_version, phonepe_salt_key, phonepe_salt_index, phonepe_env, razorpay_key_id, razorpay_key_secret')
+      .select('razorpay_key_id, razorpay_key_secret')
       .maybeSingle()
 
-    const PHONEPE_MERCHANT_ID = config?.phonepe_merchant_id || Deno.env.get('PHONEPE_MERCHANT_ID') || 'PGTESTPAYUAT'
-    const PHONEPE_CLIENT_ID = config?.phonepe_client_id || Deno.env.get('PHONEPE_CLIENT_ID') || ''
-    const PHONEPE_CLIENT_SECRET = config?.phonepe_client_secret || Deno.env.get('PHONEPE_CLIENT_SECRET') || ''
-    const PHONEPE_CLIENT_VERSION = config?.phonepe_client_version || Deno.env.get('PHONEPE_CLIENT_VERSION') || '1'
-    const PHONEPE_SALT_KEY = config?.phonepe_salt_key || Deno.env.get('PHONEPE_SALT_KEY') || '099eb0cd-02fc-4e41-88db-1032db451407'
-    const PHONEPE_SALT_INDEX = config?.phonepe_salt_index || Deno.env.get('PHONEPE_SALT_INDEX') || '1'
-    const PHONEPE_ENV = (config?.phonepe_env || Deno.env.get('PHONEPE_ENV') || 'UAT').toUpperCase()
+    const RAZORPAY_KEY_ID = config?.razorpay_key_id || Deno.env.get('RAZORPAY_KEY_ID') || ''
+    const RAZORPAY_KEY_SECRET = config?.razorpay_key_secret || Deno.env.get('RAZORPAY_KEY_SECRET') || ''
 
-    // Helper for PhonePe Refund API
-    // IMPORTANT: A successful API response means PhonePe ACCEPTED the refund request.
-    // It does NOT mean the money has moved. The state is always PENDING initially.
-    // PhonePe sends a webhook callback (REFUND_SUCCESS / REFUND_ERROR) ~90s later
-    // which updates the DB via the verify-phonepe-payment function.
-    const processPhonePeRefund = async (amount: number, reason: string) => {
-      const refundTxnId = `REFUND_${booking.id.replace(/-/g, '').slice(0, 8)}_${Date.now()}`
-      const baseUrl = PHONEPE_ENV === 'PROD'
-        ? 'https://api.phonepe.com/apis/hermes/pg/v1/refund'
-        : 'https://api-preprod.phonepe.com/apis/pg-sandbox/pg/v1/refund'
+    // Helper for Razorpay Refund API
+    // Razorpay supports refunds on a captured payment via: POST /v1/payments/:payment_id/refund
+    const processRazorpayRefund = async (amount: number, reason: string) => {
+      const razorpayPaymentId = booking.razorpay_payment_id
 
-      const payloadObj: Record<string, any> = {
-        merchantId: PHONEPE_MERCHANT_ID,
-        merchantTransactionId: refundTxnId,
-        originalTransactionId: booking.phonepe_merchant_transaction_id || booking.phonepe_transaction_id,
-        amount: Math.round(amount * 100),
-        callbackUrl: `${Deno.env.get('SUPABASE_URL')}/functions/v1/verify-phonepe-payment`,
+      if (!razorpayPaymentId) {
+        console.warn('[cancel-booking] No razorpay_payment_id found on booking — cannot process refund')
+        return { ok: false, data: { error: 'No Razorpay payment ID on booking' }, refundId: null }
       }
 
-      if (PHONEPE_CLIENT_ID) {
-        payloadObj.clientId = PHONEPE_CLIENT_ID
-        payloadObj.clientVersion = Number(PHONEPE_CLIENT_VERSION) || 1
+      if (!RAZORPAY_KEY_ID || !RAZORPAY_KEY_SECRET) {
+        console.error('[cancel-booking] Razorpay credentials not configured')
+        return { ok: false, data: { error: 'Razorpay credentials not configured' }, refundId: null }
       }
 
-      const base64Payload = btoa(JSON.stringify(payloadObj))
-      const secret = PHONEPE_CLIENT_SECRET || PHONEPE_SALT_KEY
-      const stringToSign = base64Payload + '/pg/v1/refund' + secret
-      const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(stringToSign))
-      const hash = Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('')
-      const xVerify = `${hash}###${PHONEPE_SALT_INDEX}`
+      const rzpAuth = btoa(`${RAZORPAY_KEY_ID}:${RAZORPAY_KEY_SECRET}`)
+      const amountPaise = Math.round(amount * 100)
 
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-        'X-VERIFY': xVerify,
-      }
-
-      if (PHONEPE_CLIENT_ID) {
-        headers['X-CLIENT-ID'] = PHONEPE_CLIENT_ID
-        headers['X-CLIENT-VERSION'] = String(PHONEPE_CLIENT_VERSION)
-      }
-
-      const refundRes = await fetch(baseUrl, {
+      const refundRes = await fetch(`https://api.razorpay.com/v1/payments/${razorpayPaymentId}/refund`, {
         method: 'POST',
-        headers,
-        body: JSON.stringify({ request: base64Payload })
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Basic ${rzpAuth}`,
+        },
+        body: JSON.stringify({
+          amount: amountPaise,
+          notes: {
+            reason: reason || 'Booking cancellation refund',
+            booking_id: booking_id,
+          }
+        })
       })
 
       const refundData = await refundRes.json()
-      // ok = PhonePe accepted request (money still PENDING, not moved)
-      // refundTxnId is stored in DB so webhook/poll can match the refund callback
-      return { ok: refundRes.ok && refundData.success, data: refundData, refundTxnId }
+      console.log('[cancel-booking] Razorpay refund response:', JSON.stringify(refundData))
+
+      const refundId = refundData?.id || null
+      // Razorpay refund states: 'pending' -> 'processed' (via webhook)
+      return { ok: refundRes.ok && !!refundId, data: refundData, refundId }
     }
 
     // Helper for safe DB updates
@@ -146,13 +129,14 @@ Deno.serve(async (req) => {
       const refundAmount = booking.total_amount
 
       if (isPaid) {
-        const phonepeRes = await processPhonePeRefund(refundAmount, 'Customer chose refund after salon cancellation')
-        const newRefundStatus = phonepeRes.ok ? 'processing' : 'failed'
+        const rzpRes = await processRazorpayRefund(refundAmount, 'Customer chose refund after salon cancellation')
+        const newRefundStatus = rzpRes.ok ? 'processing' : 'failed'
 
         await safeUpdateBooking(booking_id, {
           refund_status: newRefundStatus,
           refund_amount: refundAmount,
-          refund_transaction_id: phonepeRes.ok ? phonepeRes.refundTxnId : null,
+          refund_id: rzpRes.ok ? rzpRes.refundId : null,
+          refund_transaction_id: rzpRes.ok ? rzpRes.refundId : null,
           updated_at: new Date().toISOString()
         })
 
@@ -201,13 +185,14 @@ Deno.serve(async (req) => {
         ? booking.total_amount
         : Math.max(0, Math.min(serviceAmount, booking.total_amount - platformFee))
 
-      const phonepeRes = await processPhonePeRefund(refundAmount, 'Admin manual refund')
-      const newRefundStatus = phonepeRes.ok ? 'processing' : 'failed'
+      const rzpRes = await processRazorpayRefund(refundAmount, 'Admin manual refund')
+      const newRefundStatus = rzpRes.ok ? 'processing' : 'failed'
 
       await safeUpdateBooking(booking_id, {
         refund_status: newRefundStatus,
         refund_amount: refundAmount,
-        refund_transaction_id: phonepeRes.ok ? phonepeRes.refundTxnId : null,
+        refund_id: rzpRes.ok ? rzpRes.refundId : null,
+        refund_transaction_id: rzpRes.ok ? rzpRes.refundId : null,
         updated_at: new Date().toISOString()
       })
 
@@ -272,7 +257,7 @@ Deno.serve(async (req) => {
     let payment_status = booking.payment_status
     let refund_amount = 0
     let refund_status = null
-    let refund_transaction_id = null
+    let refund_id = null
 
     const subtotal = Number(booking.subtotal ?? 0)
     const offerDiscount = Number(booking.offer_discount ?? 0)
@@ -282,12 +267,12 @@ Deno.serve(async (req) => {
 
     if (booking.payment_status === 'paid') {
       refund_amount = baseRefundAmount
-      const phonepeRes = await processPhonePeRefund(refund_amount, cancel_reason || 'Cancelled by customer')
-      if (phonepeRes.ok) {
+      const rzpRes = await processRazorpayRefund(refund_amount, cancel_reason || 'Cancelled by customer')
+      if (rzpRes.ok) {
         refund_status = 'processing'
-        refund_transaction_id = phonepeRes.refundTxnId
+        refund_id = rzpRes.refundId
       } else {
-        console.error('PhonePe customer cancellation refund failed:', phonepeRes.data)
+        console.error('Razorpay customer cancellation refund failed:', rzpRes.data)
         refund_status = 'failed'
       }
     }
@@ -300,8 +285,8 @@ Deno.serve(async (req) => {
       payment_status,
       refund_status,
       refund_amount: refund_amount || booking.refund_amount || 0,
-      refund_id: refund_transaction_id,
-      refund_transaction_id,
+      refund_id,
+      refund_transaction_id: refund_id,
       updated_at: new Date().toISOString()
     })
 
@@ -312,7 +297,7 @@ Deno.serve(async (req) => {
       target_id: booking.customer_id,
       title: '❌ Booking Cancelled',
       message: refund_status === 'processing'
-        ? `${message} A refund of ₹${refund_amount} has been initiated and will be credited within 2-7 business days.`
+        ? `${message} A refund of ₹${refund_amount} has been initiated via Razorpay and will be credited within 5–7 business days.`
         : message,
       notif_type: 'booking',
       is_read: false,
@@ -376,4 +361,3 @@ Deno.serve(async (req) => {
     )
   }
 })
-

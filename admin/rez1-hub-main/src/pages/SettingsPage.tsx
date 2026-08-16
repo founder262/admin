@@ -23,21 +23,12 @@ const SettingsPage = () => {
     categoriesEnabled: true,
   });
 
-  const [phonepeConfig, setPhonepeConfig] = useState({
-    phonepe_enabled: true,
-    phonepe_env: "UAT",
-    phonepe_merchant_id: "",
-    phonepe_client_id: "",
-    phonepe_client_secret: "",
-    phonepe_client_version: "1",
-    phonepe_webhook_url: "https://api.rez1.in/api/payments/phonepe/webhook",
-    phonepe_webhook_username: "",
-    phonepe_webhook_password: "",
-    phonepe_success_url: "https://rez1.in/payment/success",
-    phonepe_failure_url: "https://rez1.in/payment/failed",
-    phonepe_cancel_url: "https://rez1.in/payment/cancel",
-    phonepe_salt_key: "",
-    phonepe_salt_index: "1",
+  const [razorpayConfig, setRazorpayConfig] = useState({
+    razorpay_enabled: true,
+    razorpay_key_id: "",
+    razorpay_key_secret: "",
+    razorpay_webhook_secret: "",
+    razorpay_env: "PROD",
   });
 
   const [adminProfile, setAdminProfile] = useState({
@@ -49,8 +40,6 @@ const SettingsPage = () => {
   const [platformConfigId, setPlatformConfigId] = useState<string | null>(null);
 
   useEffect(() => {
-    // Fetch profile from localStorage (DB save added below)
-    const adminId = localStorage.getItem("rez1_admin_id");
     setAdminProfile({
       name: localStorage.getItem("rez1_admin_name") || "Admin",
       email: "founder@rez1.in"
@@ -62,9 +51,7 @@ const SettingsPage = () => {
         .select(
           "id, booking_fee, gst_percent, max_discount_cap, default_buffer_minutes, " +
           "max_booking_window_days, max_persons_per_booking, default_slot_duration, autoplay_speed_seconds, " +
-          "phonepe_enabled, phonepe_env, phonepe_merchant_id, phonepe_client_id, phonepe_client_secret, " +
-          "phonepe_client_version, phonepe_webhook_url, phonepe_webhook_username, phonepe_webhook_password, " +
-          "phonepe_success_url, phonepe_failure_url, phonepe_cancel_url, phonepe_salt_key, phonepe_salt_index, categories_enabled"
+          "razorpay_key_id, razorpay_key_secret, razorpay_webhook_secret, categories_enabled"
         )
         .maybeSingle();
 
@@ -80,21 +67,12 @@ const SettingsPage = () => {
           promoAutoplaySpeed: cfg.autoplay_speed_seconds ?? 4,
           categoriesEnabled: cfg.categories_enabled ?? true,
         });
-        setPhonepeConfig({
-          phonepe_enabled: cfg.phonepe_enabled ?? true,
-          phonepe_env: cfg.phonepe_env ?? "UAT",
-          phonepe_merchant_id: cfg.phonepe_merchant_id ?? "",
-          phonepe_client_id: cfg.phonepe_client_id ?? "",
-          phonepe_client_secret: cfg.phonepe_client_secret ?? "",
-          phonepe_client_version: cfg.phonepe_client_version ?? "1",
-          phonepe_webhook_url: cfg.phonepe_webhook_url ?? "https://api.rez1.in/api/payments/phonepe/webhook",
-          phonepe_webhook_username: cfg.phonepe_webhook_username ?? "",
-          phonepe_webhook_password: cfg.phonepe_webhook_password ?? "",
-          phonepe_success_url: cfg.phonepe_success_url ?? "https://rez1.in/payment/success",
-          phonepe_failure_url: cfg.phonepe_failure_url ?? "https://rez1.in/payment/failed",
-          phonepe_cancel_url: cfg.phonepe_cancel_url ?? "https://rez1.in/payment/cancel",
-          phonepe_salt_key: cfg.phonepe_salt_key ?? "",
-          phonepe_salt_index: cfg.phonepe_salt_index ?? "1",
+        setRazorpayConfig({
+          razorpay_enabled: true,
+          razorpay_key_id: cfg.razorpay_key_id ?? "",
+          razorpay_key_secret: cfg.razorpay_key_secret ?? "",
+          razorpay_webhook_secret: cfg.razorpay_webhook_secret ?? "",
+          razorpay_env: "PROD",
         });
         setPlatformConfigId(cfg.id);
       } else if (error) {
@@ -136,22 +114,11 @@ const SettingsPage = () => {
     }
   };
 
-  const handleSavePhonePe = async () => {
+  const handleSaveRazorpay = async () => {
     const payload = {
-      phonepe_enabled: phonepeConfig.phonepe_enabled,
-      phonepe_env: phonepeConfig.phonepe_env,
-      phonepe_merchant_id: phonepeConfig.phonepe_merchant_id,
-      phonepe_client_id: phonepeConfig.phonepe_client_id,
-      phonepe_client_secret: phonepeConfig.phonepe_client_secret,
-      phonepe_client_version: phonepeConfig.phonepe_client_version,
-      phonepe_webhook_url: phonepeConfig.phonepe_webhook_url,
-      phonepe_webhook_username: phonepeConfig.phonepe_webhook_username,
-      phonepe_webhook_password: phonepeConfig.phonepe_webhook_password,
-      phonepe_success_url: phonepeConfig.phonepe_success_url,
-      phonepe_failure_url: phonepeConfig.phonepe_failure_url,
-      phonepe_cancel_url: phonepeConfig.phonepe_cancel_url,
-      phonepe_salt_key: phonepeConfig.phonepe_client_secret,
-      phonepe_salt_index: "1",
+      razorpay_key_id: razorpayConfig.razorpay_key_id,
+      razorpay_key_secret: razorpayConfig.razorpay_key_secret,
+      razorpay_webhook_secret: razorpayConfig.razorpay_webhook_secret,
     };
 
     let errorMsg = null;
@@ -167,9 +134,9 @@ const SettingsPage = () => {
     }
 
     if (errorMsg) {
-      toast.error("Failed to save PhonePe settings: " + errorMsg);
+      toast.error("Failed to save Razorpay settings: " + errorMsg);
     } else {
-      toast.success("PhonePe configuration saved!");
+      toast.success("Razorpay configuration saved!");
     }
   };
 
@@ -209,8 +176,8 @@ const SettingsPage = () => {
                 await adminApi.update("admin_users", adminId, { full_name: adminProfile.name });
                 toast.success("Profile updated!");
               } catch (err) {
-                console.warn("DB profile save failed (check RLS policy on admin_users):", err);
-                toast.success("Profile saved locally. (DB update requires RLS policy — see guide)");
+                console.warn("DB profile save failed:", err);
+                toast.success("Profile saved locally.");
               }
             } else {
               toast.success("Profile saved locally!");
@@ -269,140 +236,65 @@ const SettingsPage = () => {
 
         <Separator />
 
-        {/* PhonePe Gateway Configuration */}
+        {/* Razorpay Gateway Configuration */}
         <div className="rounded-xl border border-border bg-card p-6 space-y-6 animate-fade-in">
           <div>
-            <h2 className="text-lg font-semibold text-card-foreground">PhonePe Payment Gateway Configuration</h2>
+            <h2 className="text-lg font-semibold text-card-foreground flex items-center gap-2">
+              💳 Razorpay Payment Gateway
+            </h2>
             <p className="text-sm text-muted-foreground mt-1">
-              Configure Client ID, Client Secret, Client Version, and Webhook credentials for PhonePe.
+              Configure your Razorpay Key ID, Key Secret, and Webhook Secret for live payment processing.
             </p>
-          </div>
-          <div className="grid gap-4">
-            <div className="flex items-center gap-3">
-              <input
-                type="checkbox"
-                id="phonepe-enabled"
-                checked={phonepeConfig.phonepe_enabled}
-                onChange={e => setPhonepeConfig(c => ({ ...c, phonepe_enabled: e.target.checked }))}
-                className="h-4 w-4 rounded accent-primary"
-              />
-              <Label htmlFor="phonepe-enabled">Enable PhonePe Payments</Label>
+            <div className="mt-3 p-3 rounded-lg bg-blue-500/10 border border-blue-500/20 text-xs text-blue-400 space-y-1">
+              <p className="font-semibold">📋 Razorpay Welcome Offer (Active for new merchants from 1 July 2026)</p>
+              <p>✅ Zero transaction fees on first ₹5,00,000 GMV for 90 days from activation</p>
+              <p>✅ No coupon code needed — Amount Credits applied automatically on KYC approval</p>
+              <p>⚠️ Excludes: Prepaid Cards, Corporate Credit Cards, AMEX, Diners Club, and EMI-based payments</p>
             </div>
+          </div>
 
+          <div className="grid grid-cols-1 gap-4">
             <div className="grid gap-2">
-              <Label>Environment Mode</Label>
-              <div className="flex items-center gap-3">
-                <Button
-                  type="button"
-                  variant={phonepeConfig.phonepe_env === "UAT" ? "default" : "outline"}
-                  onClick={() => setPhonepeConfig(c => ({ ...c, phonepe_env: "UAT" }))}
-                  size="sm"
-                >
-                  Sandbox (UAT)
-                </Button>
-                <Button
-                  type="button"
-                  variant={phonepeConfig.phonepe_env === "PROD" ? "default" : "outline"}
-                  onClick={() => setPhonepeConfig(c => ({ ...c, phonepe_env: "PROD" }))}
-                  size="sm"
-                >
-                  Production (Live)
-                </Button>
-              </div>
+              <Label className="font-semibold">Razorpay Key ID <span className="text-xs text-muted-foreground">(starts with rzp_live_ or rzp_test_)</span></Label>
+              <Input
+                placeholder="rzp_live_xxxxxxxxxxxxxxxx"
+                value={razorpayConfig.razorpay_key_id}
+                onChange={e => setRazorpayConfig(c => ({ ...c, razorpay_key_id: e.target.value }))}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label className="font-semibold">Razorpay Key Secret</Label>
+              <Input
+                type="password"
+                placeholder="Enter Key Secret from Razorpay Dashboard → Settings → API Keys"
+                value={razorpayConfig.razorpay_key_secret}
+                onChange={e => setRazorpayConfig(c => ({ ...c, razorpay_key_secret: e.target.value }))}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label className="font-semibold">Webhook Secret</Label>
+              <Input
+                type="password"
+                placeholder="Enter Webhook Secret from Razorpay Dashboard → Settings → Webhooks"
+                value={razorpayConfig.razorpay_webhook_secret}
+                onChange={e => setRazorpayConfig(c => ({ ...c, razorpay_webhook_secret: e.target.value }))}
+              />
+              <p className="text-xs text-muted-foreground">
+                Webhook URL to register in Razorpay: <code className="bg-muted px-1 py-0.5 rounded text-[11px]">https://[your-supabase-url]/functions/v1/razorpay-webhook</code>
+              </p>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="grid gap-2">
-                <Label className="font-semibold">Merchant ID</Label>
-                <Input
-                  placeholder="M221F6V1RTPZ6"
-                  value={phonepeConfig.phonepe_merchant_id}
-                  onChange={e => setPhonepeConfig(c => ({ ...c, phonepe_merchant_id: e.target.value }))}
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label className="font-semibold">Client ID</Label>
-                <Input
-                  placeholder="SU2607281522118831940246"
-                  value={phonepeConfig.phonepe_client_id}
-                  onChange={e => setPhonepeConfig(c => ({ ...c, phonepe_client_id: e.target.value }))}
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label className="font-semibold">Client Secret</Label>
-                <Input
-                  type="password"
-                  placeholder="Enter Client Secret from PhonePe Developer Settings"
-                  value={phonepeConfig.phonepe_client_secret}
-                  onChange={e => setPhonepeConfig(c => ({ ...c, phonepe_client_secret: e.target.value }))}
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label className="font-semibold">Client Version</Label>
-                <Input
-                  placeholder="1"
-                  value={phonepeConfig.phonepe_client_version}
-                  onChange={e => setPhonepeConfig(c => ({ ...c, phonepe_client_version: e.target.value }))}
-                />
-              </div>
-            </div>
-
-            <div className="space-y-3 pt-2">
-              <div className="grid gap-2">
-                <Label>Webhook URL</Label>
-                <Input
-                  value={phonepeConfig.phonepe_webhook_url}
-                  onChange={e => setPhonepeConfig(c => ({ ...c, phonepe_webhook_url: e.target.value }))}
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="grid gap-2">
-                  <Label>Webhook Username</Label>
-                  <Input
-                    placeholder="Username"
-                    value={phonepeConfig.phonepe_webhook_username}
-                    onChange={e => setPhonepeConfig(c => ({ ...c, phonepe_webhook_username: e.target.value }))}
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label>Webhook Password</Label>
-                  <Input
-                    type="password"
-                    placeholder="••••••••"
-                    value={phonepeConfig.phonepe_webhook_password}
-                    onChange={e => setPhonepeConfig(c => ({ ...c, phonepe_webhook_password: e.target.value }))}
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-3 gap-3">
-                <div className="grid gap-1">
-                  <Label className="text-xs">Success URL</Label>
-                  <Input
-                    className="text-xs"
-                    value={phonepeConfig.phonepe_success_url}
-                    onChange={e => setPhonepeConfig(c => ({ ...c, phonepe_success_url: e.target.value }))}
-                  />
-                </div>
-                <div className="grid gap-1">
-                  <Label className="text-xs">Failure URL</Label>
-                  <Input
-                    className="text-xs"
-                    value={phonepeConfig.phonepe_failure_url}
-                    onChange={e => setPhonepeConfig(c => ({ ...c, phonepe_failure_url: e.target.value }))}
-                  />
-                </div>
-                <div className="grid gap-1">
-                  <Label className="text-xs">Cancel URL</Label>
-                  <Input
-                    className="text-xs"
-                    value={phonepeConfig.phonepe_cancel_url}
-                    onChange={e => setPhonepeConfig(c => ({ ...c, phonepe_cancel_url: e.target.value }))}
-                  />
-                </div>
-              </div>
+            <div className="p-3 rounded-lg bg-muted/30 border border-border text-xs text-muted-foreground space-y-1">
+              <p className="font-semibold text-foreground">🔗 Setup Instructions</p>
+              <p>1. Login to <strong>dashboard.razorpay.com</strong> → Settings → API Keys → Generate Key</p>
+              <p>2. Copy the <strong>Key ID</strong> and <strong>Key Secret</strong> above</p>
+              <p>3. Go to Settings → Webhooks → Add New Webhook with the URL above</p>
+              <p>4. Enable events: <code>payment.captured</code>, <code>payment.failed</code>, <code>refund.processed</code></p>
+              <p>5. Copy the Webhook Secret into the field above and save</p>
             </div>
           </div>
-          <Button onClick={handleSavePhonePe}>Save PhonePe Settings</Button>
+
+          <Button onClick={handleSaveRazorpay}>Save Razorpay Settings</Button>
         </div>
 
         <Separator />
